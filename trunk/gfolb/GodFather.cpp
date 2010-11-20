@@ -1,4 +1,19 @@
 /*
+	Copyright 2010, Sumeet Chhetri
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
+/*
  * GodFather.cpp
  *
  *  Created on: Nov 12, 2010
@@ -6,6 +21,7 @@
  */
 
 #include "GodFather.h"
+#include "PropFileReader.h"
 
 GodFather::GodFather() {
 	// TODO Auto-generated constructor stub
@@ -21,8 +37,52 @@ void sigchld_handler(int s)
     while(waitpid(-1, NULL, WNOHANG) > 0);
 }
 
+int byteArrayToInt(char *b) {
+        return ((b[0] & 0xFF) << 24)
+                + ((b[1] & 0xFF) << 16)
+                + ((b[2] & 0xFF) << 8)
+                + (b[3] & 0xFF);
+}
+
+char* intToByteArray(int value) {
+        char *b = new char[4];
+        for (int i = 0; i < 4; i++) {
+            int offset = (4 - 1 - i) * 8;
+            b[i] = (char) ((value >> offset) & 0xFF);
+        }
+        return b;
+    }
+
+
 int main(int argc, char* argv[])
 {
+	PropFileReader pread;
+	propMap props = pread.getProperties("gfolb.prop");
+	bool con_pers = false;
+	string conn_type = props["CONN_PERS"];//Persistent or Non-persistent
+	if(conn_type=="true" || conn_type=="TRUE")
+		con_pers = true;
+	string req_type = props["REQ_TYPE"];//Text or Binary Fixed Length
+	string req_del_def = props["REQ_DEF_DEL"];//For Text (Header delimiter--\n|\r\n) For BFL (length of header in bytes)
+	string req_con_len_txt = props["REQ_CNT_LEN_TXT"];//For Text only the header having content length (with the separator -- "Content-Length: ")
+	string prot_type = props["PROT_TYPE"];//TCP or UDP
+	string serv_addrs = props["SERV_ADDRS"];//localhost:8080;10.101.10.10:9999
+	string gfolb_mode = props["GFOLB_MODE"];//LB or FO or CH or IR
+	int conn_pool = 10;
+	try
+	{
+		if(props["SPOOL_SIZ"]!="")
+		conn_pool = boost::lexical_cast<int>(props["SPOOL_SIZ"]);//Connection pool size to the servers
+	}
+	catch(...)
+	{
+		conn_pool = 10;
+	}
+	string mod_mode = props["GFOLB_MMODE"];//Default or Name of module (http,smpp,sip...)
+	string ssl_enb = props["SSL_ENAB"];//is SSL enabled
+	string port_no = props["GFOLB_PORT"];//GFOLB listening port number
+	strVec ipprts;
+	boost::iter_split(ipprts, serv_addrs, boost::first_finder(";"));
 	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
@@ -38,7 +98,7 @@ int main(int argc, char* argv[])
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE; // use my IP
-    if ((rv = getaddrinfo(NULL, PORT, &hints, &servinfo)) != 0) {
+    if ((rv = getaddrinfo(NULL, port_no.c_str(), &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
     }
@@ -80,9 +140,13 @@ int main(int argc, char* argv[])
         perror("sigaction");
         exit(1);
     }
-    IConnectionHandler *handler = new IConnectionHandler;
-    cout << "listening on port 9992\n" << flush;
-    while(true)
+    ofstream ofs("serv.ctrl");
+    ofs << "Proces" << flush;
+    ofs.close();
+    IConnectionHandler *handler = new IConnectionHandler(ipprts,con_pers,conn_pool,props);//new IConnectionHandler("localhost",8080,false,10);
+    cout << "listening on port "<< port_no << endl;
+    ifstream ifs("serv.ctrl");
+    while(ifs.is_open())
     {
     	new_fd = -1;
 		sin_size = sizeof their_addr;
@@ -97,4 +161,5 @@ int main(int argc, char* argv[])
 			handler->add(new_fd);
 		}
     }
+    ifs.close();
 }
