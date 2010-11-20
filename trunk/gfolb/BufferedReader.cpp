@@ -123,7 +123,7 @@ string BufferedReader::singleRequest(int fd)
 	BIO *io=NULL,*ssl_bio=NULL;
 	int cntlen = 0;
 	char buf[MAXBUFLENM];
-	string alldat;
+	string alldat = "";
 	if(isText)
 	{
 		if(isSSLEnabled)
@@ -383,7 +383,7 @@ string BufferedReader::singleRequest(int fd)
 				}
 				else if(er>0)
 				{
-					for(int i=0;i<lengthm-bfmlen;i++)
+					for(int i=0;i<er;i++)
 						alldat.push_back(buf[i]);
 					memset(&buf[0], 0, sizeof(buf));
 				}

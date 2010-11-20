@@ -45,7 +45,7 @@ propMap PropFileReader::getProperties(string filepath)
       strVec vemp;
 	  while(getline(myfile,line,'\n'))
 	  {
-		  if(line!=""&& line.at(0)!="#")
+		  if(line!=""&& line.at(0)!='#')
 		  {
 			  boost::iter_split(vemp, line, boost::first_finder("="));
 		  	  if(vemp.size()==2)

@@ -76,17 +76,27 @@ void IConnectionHandler::service(int fd,string data)
 	cout << "done with request" << flush;
 }
 
-IConnectionHandler::IConnectionHandler(string ip,int port,bool persistent,int poolsize)
+/*IConnectionHandler::IConnectionHandler(string ip,int port,bool persistent,int poolsize)
 {
 	boost::thread m_thread(boost::bind(&handle,this));
 	ConnectionPool::createPool(poolsize,ip,port,persistent);
-}
+}*/
 
 IConnectionHandler::IConnectionHandler(vector<string> ipps,bool persistent,int poolsize,propMap props)
 {
+	if(props["GFOLB_MODE"]=="LB" || props["GFOLB_MODE"]=="FO" || props["GFOLB_MODE"]=="CH"
+			|| props["GFOLB_MODE"]=="IR")
+	{
+		this->mode = props["GFOLB_MODE"];
+	}
+	else
+	{
+		cout << "Invalid GFOLB mode" << endl;
+		exit(0);
+	}
 	this->props = props;
 	boost::thread m_thread(boost::bind(&handle,this));
-	ConnectionPool::createPool(poolsize,ipps,persistent);
+	ConnectionPool::createPool(poolsize,ipps,persistent,this->mode);
 }
 
 void IConnectionHandler::add(int fd)
