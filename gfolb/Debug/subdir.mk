@@ -5,21 +5,27 @@
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
 ../BufferedReader.cpp \
+../Client.cpp \
 ../ConnectionPool.cpp \
 ../GodFather.cpp \
-../IConnectionHandler.cpp 
+../IConnectionHandler.cpp \
+../PropFileReader.cpp 
 
 OBJS += \
 ./BufferedReader.o \
+./Client.o \
 ./ConnectionPool.o \
 ./GodFather.o \
-./IConnectionHandler.o 
+./IConnectionHandler.o \
+./PropFileReader.o 
 
 CPP_DEPS += \
 ./BufferedReader.d \
+./Client.d \
 ./ConnectionPool.d \
 ./GodFather.d \
-./IConnectionHandler.d 
+./IConnectionHandler.d \
+./PropFileReader.d 
 
 
 # Each subdirectory must supply rules for building sources it contributes
