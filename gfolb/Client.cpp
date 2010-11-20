@@ -75,7 +75,7 @@ bool Client::connection(string host,int port)
 
     if (p == NULL) {
         fprintf(stderr, "client: failed to connect\n");
-        return false;;
+        return false;
     }
 
     inet_ntop(p->ai_family, get_in_addr1((struct sockaddr *)p->ai_addr),

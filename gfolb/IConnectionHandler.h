@@ -32,8 +32,9 @@ class IConnectionHandler {
 	map<int,bool> fds;
 	static void handle(IConnectionHandler* handler);
 	void service(int fd,string data);
+	string mode;
 public:
-	IConnectionHandler(string ip,int port,bool persistent,int poolsize);
+	//IConnectionHandler(string ip,int port,bool persistent,int poolsize);
 	IConnectionHandler(vector<string> ipps,bool persistent,int poolsize,propMap props);
 	virtual ~IConnectionHandler();
 	void add(int);

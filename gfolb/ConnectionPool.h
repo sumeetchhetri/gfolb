@@ -24,6 +24,7 @@
 #define CONNECTIONPOOL_H_
 #include "Client.h"
 #include "vector"
+#include "set"
 #include <boost/thread/thread.hpp>
 using namespace std;
 class Connection
@@ -43,18 +44,23 @@ public:
 
 class ConnectionPool {
 	ConnectionPool();
-	static void keepspawiningConnections(ConnectionPool *pool);
+	static void keepspawiningConnections();
+	static void cleanUP();
 	vector<Connection> conns;
 	static ConnectionPool* instance;
 	vector<string> ip;
 	vector<int> port;
-	int num;
+	string mode;
+	int siz;
+	int num,tem;
+	int fonum;
 public:
-	static void createPool(int num,string ip,int port,bool persistent)
+	/*static void createPool(int num,string ip,int port,bool persistent)
 	{
 		if(instance==NULL)
 		{
 			instance = new ConnectionPool();
+			instance->fonum = 1;
 			instance->num = num;
 			instance->ip.push_back(ip);
 			instance->port.push_back(port);
@@ -70,17 +76,18 @@ public:
 			}
 			if(!persistent)
 			{
-				boost::thread g_thread(boost::bind(&keepspawiningConnections,instance));
+				boost::thread g_thread(boost::bind(&keepspawiningConnections));
 				cout << "pool not persistent" << flush;
 			}
 			cout << "\ninitialised connectikon pool\n" << flush;
 		}
-	}
-	static void createPool(int num,vector<string> ipprts,bool persistent)
+	}*/
+	static void createPool(int num,vector<string> ipprts,bool persistent,string mode)
 	{
 		if(instance==NULL)
 		{
 			instance = new ConnectionPool();
+			instance->mode = mode;
 			instance->num = num;
 			for (int var = 0; var < (int)ipprts.size(); ++var)
 			{
@@ -98,11 +105,18 @@ public:
 					exit(-1);
 				}
 			}
-			int tem = num/(int)instance->ip.size();
-			instance->num = tem*(int)instance->ip.size();
-			for (int var1 = 0; var1 < (int)instance->ip.size(); ++var1)
+			instance->tem = num;
+			instance->num = num;
+			instance->siz = 1;
+			if(mode=="LB")
 			{
-				for (int var = 0; var < tem; ++var)
+				instance->tem = num/(int)instance->ip.size();
+				instance->num = instance->tem*(int)instance->ip.size();
+				instance->siz = (int)instance->ip.size();
+			}
+			for (int var1 = 0; var1 < instance->siz; ++var1)
+			{
+				for (int var = 0; var < instance->tem; ++var)
 				{
 					Connection conn;
 					Client client;
@@ -115,9 +129,9 @@ public:
 			}
 			if(!persistent)
 			{
-				boost::thread g_thread(boost::bind(&keepspawiningConnections,instance));
 				cout << "pool not persistent" << flush;
 			}
+			boost::thread g_thread(boost::bind(&keepspawiningConnections));
 			cout << "\ninitialised connection pool\n" << flush;
 		}
 	}

@@ -32,24 +32,137 @@ ConnectionPool::~ConnectionPool() {
 	// TODO Auto-generated destructor stub
 }
 
-void ConnectionPool::keepspawiningConnections(ConnectionPool *pool)
+void ConnectionPool::cleanUP()
 {
+	for (int var = 0; var < (int)instance->conns.size(); ++var)
+	{
+		instance->conns.at(var).client.closeConnection();
+	}
+}
+
+void ConnectionPool::keepspawiningConnections()
+{
+	bool secfld = false;
 	while(true)
 	{
 		boost::this_thread::sleep(boost::posix_time::milliseconds(10));
-		for (int var1 = 0; var1 < (int)instance->ip.size(); ++var1)
+		if(instance->mode=="LB")
 		{
-			for (int var = 0; var < pool->num; ++var)
+			vector<int> backlog;
+			set<int> backwhch;
+			for (int var1 = 0; var1 < instance->siz; ++var1)
 			{
-				if(pool->conns.at(var).destroyed)
+				for (int var = var1*instance->tem; var < var1*instance->tem + instance->tem; ++var)
 				{
-					cout << "respawned destroyed connection" << flush;
-					pool->conns.at(var).client.closeConnection();
+					if(instance->conns.at(var).destroyed)
+					{
+						cout << "respawned destroyed connection" << flush;
+						instance->conns.at(var).client.closeConnection();
+						Connection conn;
+						Client client;
+						bool flag = client.connection(instance->ip.at(var1),instance->port.at(var1));
+						if(!flag)
+						{
+							backlog.push_back(var);
+						}
+						else
+						{
+							conn.client = client;
+							instance->conns[var] = conn;
+						}
+					}
+					else if(!instance->conns.at(var).client.isConnected())
+					{
+						Connection conn;
+						Client client;
+						bool flag = client.connection(instance->ip.at(var1),instance->port.at(var1));
+						if(!flag)
+						{
+							backlog.push_back(var);
+						}
+						else
+						{
+							conn.client = client;
+							instance->conns[var] = conn;
+						}
+					}
+					else
+					{
+						backwhch.insert(var1);
+					}
+				}
+			}
+			if(backwhch.size()>0 && backlog.size()>0)
+			{
+				set<int>::iterator it;
+				int backeach = backlog.size()/backwhch.size();
+				int backeachrem = backlog.size()%backwhch.size();
+				int cnt = 0;
+				for (it=backwhch.begin();it!=backwhch.end();++it,cnt++)
+				{
+					for (int var2 = cnt*backeach; var2 < cnt*backeach+backeach; ++var2)
+					{
+						Connection conn;
+						Client client;
+						bool flag = client.connection(instance->ip.at(*it),instance->port.at(*it));
+						if(flag)
+						{
+							conn.client = client;
+							instance->conns[var2] = conn;
+						}
+						else
+							break;
+					}
+				}
+				for (it=backwhch.begin();it!=backwhch.end();++it,cnt++)
+				{
+					while(backeachrem>0)
+					{
+						Connection conn;
+						Client client;
+						bool flag = client.connection(instance->ip.at(*it),instance->port.at(*it));
+						if(flag)
+						{
+							conn.client = client;
+							instance->conns[cnt*backeach+backeachrem] = conn;
+						}
+						else
+							break;
+						backeachrem--;
+					}
+				}
+			}
+		}
+		else if(instance->mode=="FO")
+		{
+			if(instance->fonum==0)
+			{
+				cout << "Now trying Primary again.." << endl;
+				cout << "Will quit if this fails.." << endl;
+			}
+			for (int var = 0; var < instance->num; ++var)
+			{
+				if(!instance->conns.at(var).client.isConnected())
+				{
 					Connection conn;
 					Client client;
-					client.connection(pool->ip.at(var1),pool->port.at(var1));
+					bool flag = client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+					if(!flag)
+					{
+						cout << "Failover Secondary link failed..." << endl;
+						instance->fonum = 0;
+						secfld = true;
+						if(secfld)
+						{
+							cout << "Both links down will quit now..." << endl;
+							cleanUP();
+							exit(-1);
+						}
+						else
+							break;
+					}
 					conn.client = client;
-					pool->conns[var] = conn;
+					instance->conns[var] = conn;
 				}
 			}
 		}
