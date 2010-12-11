@@ -64,6 +64,8 @@ using namespace std;
 #include "string"
 #include <sstream>
 #include <typeinfo>
+#include "Server.h"
+#include <boost/algorithm/string.hpp>
 #define MAXEPOLLSIZE 100
 #define BACKLOGM 500
 #define MAXBUFLENM 32768

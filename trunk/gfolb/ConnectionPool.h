@@ -26,6 +26,7 @@
 #include "vector"
 #include "set"
 #include <boost/thread/thread.hpp>
+#include "fstream"
 using namespace std;
 class Connection
 {
@@ -55,6 +56,7 @@ class ConnectionPool {
 	int num,tem;
 	int fonum;
 	bool persi;
+	int onlineroute;
 public:
 	/*static void createPool(int num,string ip,int port,bool persistent)
 	{
@@ -93,6 +95,7 @@ public:
 			instance->persi = persistent;
 			instance->num = num;
 			instance->fonum = 0;
+			instance->onlineroute = 0;
 			for (int var = 0; var < (int)ipprts.size(); ++var)
 			{
 				string whl = ipprts.at(var);
@@ -111,12 +114,11 @@ public:
 			}
 			instance->tem = num;
 			instance->num = num;
-			instance->siz = 1;
+			instance->siz = (int)instance->ip.size();
 			if(mode=="LB")
 			{
 				instance->tem = num/(int)instance->ip.size();
 				instance->num = instance->tem*(int)instance->ip.size();
-				instance->siz = (int)instance->ip.size();
 			}
 			if(persistent)
 			{
@@ -149,6 +151,7 @@ public:
 			}
 			cout << "\ninitialised connection pool\n" << flush;
 		}
+		cout << instance << endl;
 	}
 	static Connection* getConnection()
 	{
@@ -156,12 +159,64 @@ public:
 		if(!instance->persi)
 		{
 			Connection* con = new Connection;
-			Client client;
-			client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
-			con->client = client;
-			instance->fonum++;
-			if(instance->fonum==instance->siz)
-				instance->fonum = 0;
+			int tries = 0;
+			string msg;
+			if(instance->mode=="LB")
+			{
+				con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+				instance->fonum++;
+				if(instance->fonum==instance->siz)
+					instance->fonum = 0;
+				msg = "no servers available";
+			}
+			else if(instance->mode=="FO")
+			{
+				con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+				msg = "no servers available to switch over to";
+			}
+			else if(instance->mode=="OR")
+			{
+				ifstream ifs("o_data");
+				if(ifs.is_open())
+				{
+					string temp;
+					getline(ifs,temp);
+					try
+					{
+						int nwrt = boost::lexical_cast<int>(temp);
+						instance->onlineroute = nwrt;
+						cout << "got the changed route " << nwrt << endl;
+					}
+					catch(...)
+					{
+					}
+					remove("o_data");
+				}
+				cout << instance->onlineroute << endl;
+				con->client.connection(instance->ip.at(instance->onlineroute),instance->port.at(instance->onlineroute));
+				return con;
+			}
+			while(!con->client.isConnected())
+			{
+				if(instance->mode=="FO")instance->fonum++;
+				if(instance->fonum==instance->siz)
+				{
+					tries++;
+					instance->fonum = 0;
+					if(tries==3)
+					{
+						cout << msg << endl;
+						exit(0);
+					}
+				}
+				con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+				if(instance->mode=="LB")
+				{
+					instance->fonum++;
+					if(instance->fonum==instance->siz)
+						instance->fonum = 0;
+				}
+			}
 			return con;
 		}
 		else
@@ -189,6 +244,23 @@ public:
 		return conn;
 	}
 	virtual ~ConnectionPool();
+	static string validate(vector<string> cmd)
+	{
+		try
+		{
+			cout << instance << endl;
+			int nwrt = boost::lexical_cast<int>(cmd.at(2));
+			ofstream ofs("o_data");
+			ofs.write(cmd.at(2).c_str(),cmd.at(2).length());
+			ofs.close();
+			cout << "changed route " << nwrt << endl;
+		}
+		catch(...)
+		{
+			return "INVALID ARGUMENT";
+		}
+		return "COMMAND SUCCESSFULL";
+	}
 	static void release(Connection *conn)
 	{
 		if(!instance->persi)
