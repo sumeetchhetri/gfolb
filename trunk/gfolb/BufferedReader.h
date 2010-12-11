@@ -29,9 +29,11 @@
 #include "vector"
 #include "queue"
 #include <iostream>
+#include <boost/algorithm/string.hpp>
 #include <openssl/ssl.h>
 #include <boost/lexical_cast.hpp>
 #include "PropFileReader.h"
+#include <fcntl.h>
 #define CLIENT_AUTH_REQUEST 1
 #define CLIENT_AUTH_REQUIRE 2
 #define CLIENT_AUTH_REHANDSHAKE 3
@@ -50,12 +52,13 @@ class BufferedReader {
 	bool isSSLEnabled,isDefault,isText;
 	int bfmlen;
 	string hdrdelm,cntlnhdr;
-	boost::mutex p_mutex;
+
 public:
+	boost::mutex p_mutex;
 	string singleRequest(int);
+	void erase(int);
 	map<int,bool> fds;
 	map<int,queue<string> > q;
-	map<int,bool> done;
 	BufferedReader(propMap props);
 	virtual ~BufferedReader();
 };

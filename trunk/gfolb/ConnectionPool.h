@@ -54,6 +54,7 @@ class ConnectionPool {
 	int siz;
 	int num,tem;
 	int fonum;
+	bool persi;
 public:
 	/*static void createPool(int num,string ip,int port,bool persistent)
 	{
@@ -84,11 +85,14 @@ public:
 	}*/
 	static void createPool(int num,vector<string> ipprts,bool persistent,string mode)
 	{
+
 		if(instance==NULL)
 		{
 			instance = new ConnectionPool();
 			instance->mode = mode;
+			instance->persi = persistent;
 			instance->num = num;
+			instance->fonum = 0;
 			for (int var = 0; var < (int)ipprts.size(); ++var)
 			{
 				string whl = ipprts.at(var);
@@ -114,50 +118,90 @@ public:
 				instance->num = instance->tem*(int)instance->ip.size();
 				instance->siz = (int)instance->ip.size();
 			}
-			for (int var1 = 0; var1 < instance->siz; ++var1)
+			if(persistent)
 			{
-				for (int var = 0; var < instance->tem; ++var)
+				for (int var1 = 0; var1 < (int)instance->siz; ++var1)
 				{
-					Connection conn;
-					Client client;
-					client.connection(instance->ip.at(var1),instance->port.at(var1));
-					conn.client = client;
-					conn.destroyed = false;
-					conn.busy = false;
-					instance->conns.push_back(conn);
+					for (int var = 0; var < instance->tem; ++var)
+					{
+						Connection conn;
+						Client client;
+						client.connection(instance->ip.at(var1),instance->port.at(var1));
+						if(!client.isConnected())
+							break;
+						conn.client = client;
+						conn.destroyed = false;
+						conn.busy = false;
+						instance->conns.push_back(conn);
+					}
 				}
+				if(instance->conns.size()==0)
+				{
+					cout << "No servers available" << endl;
+					exit(0);
+				}
+				cout << "pool persistent" << flush;
+				boost::thread g_thread(boost::bind(&keepspawiningConnections));
 			}
-			if(!persistent)
+			else
 			{
 				cout << "pool not persistent" << flush;
 			}
-			boost::thread g_thread(boost::bind(&keepspawiningConnections));
 			cout << "\ninitialised connection pool\n" << flush;
 		}
 	}
 	static Connection* getConnection()
 	{
 		Connection* conn = NULL;
-		for (int var = 0; var < (int)instance->conns.size(); ++var)
+		if(!instance->persi)
 		{
-			if(!instance->conns[var].busy && !instance->conns[var].destroyed
-					&& instance->conns[var].client.isConnected())
+			Connection* con = new Connection;
+			Client client;
+			client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+			con->client = client;
+			instance->fonum++;
+			if(instance->fonum==instance->siz)
+				instance->fonum = 0;
+			return con;
+		}
+		else
+		{
+			while(conn==NULL)
 			{
-				 instance->conns[var].busy = true;
-				 conn = &(instance->conns[var]);
-				 cout << "returned not null conn" << endl;
-				 break;
-			}
-			else if(!instance->conns[var].client.isConnected())
-			{
-				instance->conns[var].destroyed = true;
+				for (int var = 0; var < (int)instance->conns.size(); ++var)
+				{
+					if(!instance->conns[var].busy && !instance->conns[var].destroyed
+							&& instance->conns[var].client.isConnected())
+					{
+						 instance->conns[var].busy = true;
+						 conn = &(instance->conns[var]);
+						 cout << "returned not null conn" << endl;
+						 break;
+					}
+					else if(!instance->conns[var].client.isConnected())
+					{
+						instance->conns[var].destroyed = true;
+					}
+				}
+				boost::this_thread::sleep(boost::posix_time::milliseconds(1));
 			}
 		}
-		if(conn==NULL)
-			boost::this_thread::sleep(boost::posix_time::milliseconds(10));
 		return conn;
 	}
 	virtual ~ConnectionPool();
+	static void release(Connection *conn)
+	{
+		if(!instance->persi)
+		{
+			conn->~Connection();
+			delete conn;
+		}
+		else
+		{
+			conn->free();
+			conn->destroyed = true;
+		}
+	}
 };
 
 #endif /* CONNECTIONPOOL_H_ */

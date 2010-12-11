@@ -29,21 +29,22 @@ void IConnectionHandler::handle(IConnectionHandler* handler)
 	vector<int> fdss;
 	while(true)
 	{
-		boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+		boost::this_thread::sleep(boost::posix_time::milliseconds(1));
 		for(it=handler->fds.begin();it!=handler->fds.end();it++)
 		{
-			if(!handler->reader->q[it->first].empty())
+			if(handler->reader->q.find(it->first)!=handler->reader->q.end()
+					&& !handler->reader->q[it->first].empty())
 			{
 				string data = handler->reader->q[it->first].front();
 				handler->reader->q[it->first].pop();
 				if(data=="")
-					boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+					boost::this_thread::sleep(boost::posix_time::milliseconds(1));
 				else
 				{
 					handler->service(it->first,data);
 				}
 			}
-			else if(handler->reader->done[it->first])
+			else if(handler->reader->fds[it->first])
 			{
 				fdss.push_back(it->first);
 			}
@@ -51,29 +52,60 @@ void IConnectionHandler::handle(IConnectionHandler* handler)
 		for(int i=0;i<(int)fdss.size();i++)
 		{
 			handler->unbind(fdss.at(i));
+			handler->qmutex.lock();
 			handler->fds.erase(fdss.at(i));
-			handler->reader->done.erase(fdss.at(i));
-			handler->reader->fds.erase(fdss.at(i));
+			handler->qmutex.unlock();
 			close(fdss.at(i));
+			handler->reader->erase(fdss.at(i));
 			cout << "connection closed\n" << flush;
 		}
 		fdss.clear();
 	}
 }
 
+bool IConnectionHandler::isSockConnected(int fd,int num)
+{
+	char buf[num];
+	int err;
+	if((err=recv(fd,buf,num,MSG_PEEK))==0)
+	{
+		cout << "socket closed before being service" << endl;
+		return false;
+	}
+	return true;
+}
+
 void IConnectionHandler::service(int fd,string data)
 {
+	if(!isSockConnected(fd,15))
+	{
+		this->reader->fds[fd] = true;
+		return;
+	}
 	Connection *conn = ConnectionPool::getConnection();
 	Client client = conn->client;
 	int bytes = client.sendData(data);
 	string call,tot;
 	while((call=client.getData())!="")
+	{
 		tot.append(call);
-	bytes = send(fd,tot.c_str(),tot.length(), 0);
-	this->reader->done[fd] = true;
-	conn->free();
-	conn->destroyed = true;
-	cout << "done with request" << flush;
+	}
+	int toto = tot.length();
+	while(toto>0)
+	{
+		bytes = send(fd,tot.c_str(),tot.length(), 0);
+		cout << tot.length() << "=total and sent="<< bytes<< endl;
+		if(bytes==0 || bytes==-1)
+			break;
+		tot = tot.substr(bytes);
+		toto -= bytes;
+	}
+
+	this->reader->fds[fd] = true;
+	//this->reader->done[fd] = true;
+	ConnectionPool::release(conn);
+
+	//cout << "done with request" << flush;
 }
 
 /*IConnectionHandler::IConnectionHandler(string ip,int port,bool persistent,int poolsize)
@@ -101,10 +133,20 @@ IConnectionHandler::IConnectionHandler(vector<string> ipps,bool persistent,int p
 
 void IConnectionHandler::add(int fd)
 {
-	fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
+	if(!isSockConnected(fd,12))
+	{
+		close(fd);
+		return;
+	}
+	cout << "added to conns" << endl;
+	//fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
+	qmutex.lock();
 	this->fds[fd] = true;
-	this->reader->fds[fd] = true;
-	this->reader->done[fd] = false;
+	qmutex.unlock();
+	this->reader->p_mutex.lock();
+	this->reader->fds[fd] = false;
+	this->reader->p_mutex.unlock();
+	//this->reader->done[fd] = false;
 	bind(fd);
 }
 

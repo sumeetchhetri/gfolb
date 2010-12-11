@@ -22,7 +22,13 @@
 
 #include "GodFather.h"
 #include "PropFileReader.h"
-
+#include <openssl/engine.h>
+#include <openssl/hmac.h>
+#include <openssl/evp.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include "CryptoHandler.h"
 GodFather::GodFather() {
 	// TODO Auto-generated constructor stub
 
@@ -53,9 +59,79 @@ char* intToByteArray(int value) {
         return b;
     }
 
+void signalSIGPIPE(int dummy)
+{
+	signal(SIGPIPE,signalSIGPIPE);
+	/*string filename;
+	stringstream ss;
+	ss << servd;
+	ss << getpid();
+	ss >> filename;
+	filename.append(".cntrl");
+	remove(filename.c_str());*/
+	void * array[25];
+	int nSize = backtrace(array, 25);
+	char ** symbols = backtrace_symbols(array, nSize);
+	string tempo;
+	for (int i = 0; i < nSize; i++)
+	{
+		tempo = symbols[i];
+		tempo += "\n";
+	}
+	free(symbols);
+	cout << "Broken pipe ignore it" << getpid() << "\n" << tempo << flush;
+	//abort();
+}
+
+
+void signalSIGSEGV(int dummy)
+{
+	signal(SIGSEGV,signalSIGSEGV);
+	/*string filename;
+	stringstream ss;
+	ss << servd;
+	ss << getpid();
+	ss >> filename;
+	filename.append(".cntrl");
+	remove(filename.c_str());*/
+	void * array[25];
+	int nSize = backtrace(array, 25);
+	char ** symbols = backtrace_symbols(array, nSize);
+	string tempo;
+	for (int i = 0; i < nSize; i++)
+	{
+		tempo = symbols[i];
+		tempo += "\n";
+	}
+	free(symbols);
+	cout << "segmentation fault" << getpid() << "\n" << tempo << flush;
+	//abort();
+}
+
+int main1()
+{
+	char* temp = CryptoHandler::base64decode((unsigned char *)"c3VtZWV0OnN1bWVldA==",20);
+	cout << "after " << temp << endl;
+	return 0;
+}
+
 
 int main(int argc, char* argv[])
 {
+	signal(SIGSEGV,signalSIGSEGV);
+	signal(SIGPIPE,signalSIGPIPE);
+	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+	struct addrinfo hints, *servinfo, *p;
+	struct sockaddr_storage their_addr; // connector's address information
+	socklen_t sin_size;
+	struct sigaction sa;
+
+
+	struct epoll_event ev;
+	//struct rlimit rt;
+	int yes=1;
+	//char s[INET6_ADDRSTRLEN];
+	int rv,nfds;
 	PropFileReader pread;
 	propMap props = pread.getProperties("gfolb.prop");
 	bool con_pers = false;
@@ -83,15 +159,6 @@ int main(int argc, char* argv[])
 	string port_no = props["GFOLB_PORT"];//GFOLB listening port number
 	strVec ipprts;
 	boost::iter_split(ipprts, serv_addrs, boost::first_finder(";"));
-	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
-    struct addrinfo hints, *servinfo, *p;
-    struct sockaddr_storage their_addr; // connector's address information
-    socklen_t sin_size;
-    struct sigaction sa;
-
-
-    int yes=1;
-    int rv;
 
 
 	memset(&hints, 0, sizeof hints);
@@ -140,26 +207,102 @@ int main(int argc, char* argv[])
         perror("sigaction");
         exit(1);
     }
+    struct epoll_event events[MAXEPOLLSIZE];
+	int epoll_handle = epoll_create(MAXEPOLLSIZE);
+	ev.events = EPOLLIN | EPOLLPRI;
+	ev.data.fd = sockfd;
+	if (epoll_ctl(epoll_handle, EPOLL_CTL_ADD, sockfd, &ev) < 0)
+	{
+		fprintf(stderr, "epoll set insertion error: fd=%d\n", sockfd);
+		return -1;
+	}
+	else
+		printf("listener socket to join epoll success!\n");
+
     ofstream ofs("serv.ctrl");
     ofs << "Proces" << flush;
     ofs.close();
     IConnectionHandler *handler = new IConnectionHandler(ipprts,con_pers,conn_pool,props);//new IConnectionHandler("localhost",8080,false,10);
     cout << "listening on port "<< port_no << endl;
     ifstream ifs("serv.ctrl");
+    int curfds = 1;
     while(ifs.is_open())
-    {
-    	new_fd = -1;
-		sin_size = sizeof their_addr;
-		new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-		if (new_fd == -1)
+	{
+
+    	nfds = epoll_wait(epoll_handle, events, curfds,-1);
+
+		if (nfds == -1)
 		{
-			perror("accept");
-			continue;
+			perror("epoll_wait main process");
+			//logfile << "Interruption Signal Received\n" << flush;
+			printf("Interruption Signal Received\n");
+			curfds = 1;
+			if(errno==EBADF)
+				cout << "\nInavlid fd" <<flush;
+			else if(errno==EFAULT)
+				cout << "\nThe memory area pointed to by events is not accessible" <<flush;
+			else if(errno==EINTR)
+				cout << "\ncall was interrupted by a signal handler before any of the requested events occurred" <<flush;
+			else
+				cout << "\nnot an epoll file descriptor" <<flush;
+			//break;
 		}
-		else
+		for(int n=0;n<nfds;n++)
 		{
-			handler->add(new_fd);
+			if (events[n].data.fd == sockfd)
+			{
+				new_fd = -1;
+				sin_size = sizeof their_addr;
+				new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+				if (new_fd == -1)
+				{
+					perror("accept");
+					continue;
+				}
+				else
+				{
+					curfds++;
+					fcntl(new_fd, F_SETFL, fcntl(new_fd, F_GETFD, 0) | O_NONBLOCK);
+					ev.events = EPOLLIN | EPOLLPRI;
+					ev.data.fd = new_fd;
+					if (epoll_ctl(epoll_handle, EPOLL_CTL_ADD, new_fd, &ev) < 0)
+					{
+						perror("epoll");
+						cout << "\nerror adding to epoll cntl list" << flush;
+						return -1;
+					}
+				}
+			}
+			else
+			{
+				char buf[10];
+				int err;
+				if((err=recv(events[n].data.fd,buf,10,MSG_PEEK))==0)
+				{
+					close(events[n].data.fd);
+					cout << "\nsocket conn closed before being serviced" << flush;
+					epoll_ctl(epoll_handle, EPOLL_CTL_DEL, events[n].data.fd,&ev);
+					curfds--;
+				}
+				else if(err==10)
+				{
+					handler->add(events[n].data.fd);
+					epoll_ctl(epoll_handle, EPOLL_CTL_DEL, events[n].data.fd,&ev);
+					curfds--;
+					cout << "new valid conn" << endl;
+					string ind = handler->reader->singleRequest(events[n].data.fd);
+					if(ind!="")
+					{
+						handler->reader->p_mutex.lock();
+						handler->reader->q[events[n].data.fd].push(ind.c_str());
+						handler->reader->fds[events[n].data.fd]=true;
+						handler->reader->p_mutex.unlock();
+					}
+
+				}
+			}
 		}
-    }
+	}
     ifs.close();
 }
+

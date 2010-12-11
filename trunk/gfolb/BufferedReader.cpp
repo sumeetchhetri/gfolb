@@ -25,7 +25,7 @@
 void error_occurred(const char *error,int fd,SSL *ssl)
 {
 	cout << error << flush;
-	close(fd);
+	//close(fd);
 	int r=SSL_shutdown(ssl);
 	if(!r){
 	  /* If we called SSL_shutdown() first then
@@ -33,7 +33,7 @@ void error_occurred(const char *error,int fd,SSL *ssl)
 		 this case, try again, but first send a
 		 TCP FIN to trigger the other side's
 		 close_notify*/
-	  shutdown(fd,1);
+	  //shutdown(fd,1);
 	  r=SSL_shutdown(ssl);
 	}
 	switch(r){
@@ -49,7 +49,7 @@ void error_occurred(const char *error,int fd,SSL *ssl)
 
 void closeSSL(int fd,SSL *ssl,BIO* bio)
 {
-	BIO_free(bio);
+	BIO_free_all(bio);
 	int r=SSL_shutdown(ssl);
 	if(!r){
 	  /* If we called SSL_shutdown() first then
@@ -57,7 +57,7 @@ void closeSSL(int fd,SSL *ssl,BIO* bio)
 		 this case, try again, but first send a
 		 TCP FIN to trigger the other side's
 		 close_notify*/
-	  shutdown(fd,1);
+	  //shutdown(fd,1);
 	  r=SSL_shutdown(ssl);
 	}
 	switch(r){
@@ -78,6 +78,7 @@ void BufferedReader::readRequests(BufferedReader* reader)
 	map<int,bool>::iterator it;
 	while(true)
 	{
+		boost::this_thread::sleep(boost::posix_time::milliseconds(1));
 		for(it=reader->fds.begin();it!=reader->fds.end();it++)
 		{
 			if((bytes=recv(it->first, buf, sizeof(buf), MSG_DONTWAIT))>0)
@@ -88,9 +89,9 @@ void BufferedReader::readRequests(BufferedReader* reader)
 				bytes = -1;
 			}
 			else if(bytes==0)
-				reader->done[it->first] = true;
+				reader->fds[it->first] = true;
 			else if(bytes==-1 && errno==ECONNRESET)
-				reader->done[it->first] = true;
+				reader->fds[it->first] = true;
 		}
 	}
 }
@@ -100,20 +101,32 @@ void BufferedReader::generateRequest(BufferedReader* reader)
 	map<int,bool>::iterator it;
 	while(true)
 	{
-		boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+		boost::this_thread::sleep(boost::posix_time::milliseconds(1));
 		for(it=reader->fds.begin();it!=reader->fds.end();it++)
 		{
-			if(reader->done[it->first]==false)
+			if(reader->fds[it->first]==false)
 			{
 				string ind = reader->singleRequest(it->first);
-				if(ind=="")
-					continue;
-				cout << "\ngot new request -- " << ind.length() << flush;
-				reader->q[it->first].push(ind.c_str());
-				reader->done[it->first]=true;
+				if(ind!="")
+				{
+					reader->q[it->first].push(ind.c_str());
+					reader->fds[it->first]=true;
+				}
+			}
+			else
+			{
+
 			}
 		}
 	}
+}
+
+void BufferedReader::erase(int fd)
+{
+	this->p_mutex.lock();
+	this->fds.erase(fd);
+	this->q.erase(fd);
+	this->p_mutex.unlock();
 }
 
 string BufferedReader::singleRequest(int fd)
@@ -128,7 +141,7 @@ string BufferedReader::singleRequest(int fd)
 	{
 		if(isSSLEnabled)
 		{
-			sbio=BIO_new_socket(fd,BIO_CLOSE);
+			sbio=BIO_new_socket(fd,BIO_NOCLOSE);
 			//cout << "\nBefore = " << ssl << flush;
 			//ssl=SSL_new(ctx);
 			//cout << "\nAfter = " << ssl << flush;
@@ -137,12 +150,14 @@ string BufferedReader::singleRequest(int fd)
 			if((r=SSL_accept(ssl)<=0))
 			{
 				error_occurred("SSL accept error",fd,ssl);
-				this->done[fd]=true;
+				this->fds[fd]=true;
+				if(io!=NULL)BIO_free_all(io);
+				return "";
 			}
 
 			io=BIO_new(BIO_f_buffer());
 			ssl_bio=BIO_new(BIO_f_ssl());
-			BIO_set_ssl(ssl_bio,ssl,BIO_CLOSE);
+			BIO_set_ssl(ssl_bio,ssl,BIO_NOCLOSE);
 			BIO_push(io,ssl_bio);
 			int er=-1;
 			bool flag = true;
@@ -156,18 +171,23 @@ string BufferedReader::singleRequest(int fd)
 					case SSL_ERROR_ZERO_RETURN:
 					{
 						error_occurred("SSL error problem",fd,ssl);
-						if(io!=NULL)BIO_free(io);
-						this->done[fd]=true;
+						if(io!=NULL)BIO_free_all(io);
+						this->fds[fd]=true;
+						return "";
 					}
 					default:
 					{
 						error_occurred("SSL read problem",fd,ssl);
-						if(io!=NULL)BIO_free(io);
-						this->done[fd]=true;
+						if(io!=NULL)BIO_free_all(io);
+						this->fds[fd]=true;
+						return "";
 					}
 				}
 				if(!strcmp(buf,this->hdrdelm.c_str()))
+				{
+					alldat += (buf);
 					break;
+				}
 				string temp(buf);
 				temp = temp.substr(0,temp.length()-1);
 				alldat += (temp + "\n");
@@ -186,25 +206,29 @@ string BufferedReader::singleRequest(int fd)
 				}
 				memset(&buf[0], 0, sizeof(buf));
 			}
+			if(io!=NULL && cntlen==0)closeSSL(fd,ssl,io);
 		}
 		else
 		{
 			int er=-1;
 			bool flag = true;
-			sbio=BIO_new_socket(fd,BIO_CLOSE);
+			sbio=BIO_new_socket(fd,BIO_NOCLOSE);
 			io=BIO_new(BIO_f_buffer());
 			BIO_push(io,sbio);
+			//biosss[fd] = sbio;
 			while(flag)
 			{
 				er = BIO_gets(io,buf,BUFSIZZ-1);
 				if(er==0)
 				{
-					this->done[fd]=true;
+					this->fds[fd]=true;
+					if(io!=NULL)BIO_free_all(io);
 					cout << "\nsocket closed before being serviced" <<flush;
+					return "";
 				}
 				if(!strcmp(buf,this->hdrdelm.c_str()) || er<0)
 				{
-					alldat += "\n";
+					alldat += (buf);
 					break;
 				}
 				string temp(buf);
@@ -227,6 +251,7 @@ string BufferedReader::singleRequest(int fd)
 				}
 				memset(&buf[0], 0, sizeof(buf));
 			}
+			if(io!=NULL && cntlen==0)BIO_free_all(io);
 		}
 		if(isSSLEnabled && cntlen>0)
 		{
@@ -243,46 +268,74 @@ string BufferedReader::singleRequest(int fd)
 					case SSL_ERROR_ZERO_RETURN:
 					{
 						error_occurred("SSL error problem",fd,ssl);
-						if(io!=NULL)BIO_free(io);
-						this->done[fd]=true;
+						if(io!=NULL)BIO_free_all(io);
+						this->fds[fd]=true;
+						return "";
 					}
 					default:
 					{
 						error_occurred("SSL read problem",fd,ssl);
-						if(io!=NULL)BIO_free(io);
-						this->done[fd]=true;
+						if(io!=NULL)BIO_free_all(io);
+						this->fds[fd]=true;
+						return "";
 					}
 				}
 				string temp(buf);
 				alldat += (temp);
 				memset(&buf[0], 0, sizeof(buf));
 			}
+			if(io!=NULL)closeSSL(fd,ssl,io);
 		}
 		else if(cntlen>0)
 		{
 			int er=-1;
-			if(cntlen>0)
+			while(cntlen>0)
 			{
 				er = BIO_read(io,buf,cntlen);
 				if(er==0)
 				{
-					this->done[fd]=true;
+					this->fds[fd]=true;
+					if(io!=NULL)BIO_free_all(io);
 					cout << "\nsocket closed before being serviced" <<flush;
+					return "";
 				}
 				else if(er>0)
 				{
 					string temp(buf);
 					alldat += (temp);
 					memset(&buf[0], 0, sizeof(buf));
+					cntlen -= er;
 				}
+				cout << cntlen << " " << er << endl;
 			}
+
+			if(io!=NULL)BIO_free_all(io);
 		}
 	}
 	else
 	{
+		cout << "ISHOULD NVERE BE HERE" << endl;
 		stringstream ss;
 		if(isSSLEnabled)
 		{
+			sbio=BIO_new_socket(fd,BIO_NOCLOSE);
+			//cout << "\nBefore = " << ssl << flush;
+			//ssl=SSL_new(ctx);
+			//cout << "\nAfter = " << ssl << flush;
+			SSL_set_bio(ssl,sbio,sbio);
+			int r;
+			if((r=SSL_accept(ssl)<=0))
+			{
+				error_occurred("SSL accept error",fd,ssl);
+				this->fds[fd]=true;
+				if(io!=NULL)BIO_free_all(io);
+				return "";
+			}
+
+			io=BIO_new(BIO_f_buffer());
+			ssl_bio=BIO_new(BIO_f_ssl());
+			BIO_set_ssl(ssl_bio,ssl,BIO_NOCLOSE);
+			BIO_push(io,ssl_bio);
 			int er=-1;
 			if(bfmlen>0)
 			{
@@ -297,13 +350,15 @@ string BufferedReader::singleRequest(int fd)
 					{
 						error_occurred("SSL error problem",fd,ssl);
 						if(io!=NULL)BIO_free(io);
-						this->done[fd]=true;
+						this->fds[fd]=true;
+						return "";
 					}
 					default:
 					{
 						error_occurred("SSL read problem",fd,ssl);
 						if(io!=NULL)BIO_free(io);
-						this->done[fd]=true;
+						this->fds[fd]=true;
+						return "";
 					}
 				}
 				ss << buf;
@@ -315,14 +370,15 @@ string BufferedReader::singleRequest(int fd)
 			int er=-1;
 			if(bfmlen>0)
 			{
-				sbio=BIO_new_socket(fd,BIO_CLOSE);
+				sbio=BIO_new_socket(fd,BIO_NOCLOSE);
 				io=BIO_new(BIO_f_buffer());
 				BIO_push(io,sbio);
 				er = BIO_read(io,buf,bfmlen);
 				if(er==0)
 				{
-					this->done[fd]=true;
+					this->fds[fd]=true;
 					cout << "\nsocket closed before being serviced" <<flush;
+					return "";
 				}
 				else if(er>0)
 				{
@@ -357,13 +413,15 @@ string BufferedReader::singleRequest(int fd)
 					{
 						error_occurred("SSL error problem",fd,ssl);
 						if(io!=NULL)BIO_free(io);
-						this->done[fd]=true;
+						this->fds[fd]=true;
+						return "";
 					}
 					default:
 					{
 						error_occurred("SSL read problem",fd,ssl);
 						if(io!=NULL)BIO_free(io);
-						this->done[fd]=true;
+						this->fds[fd]=true;
+						return "";
 					}
 				}
 				ss << buf;
@@ -378,8 +436,9 @@ string BufferedReader::singleRequest(int fd)
 				er = BIO_read(io,buf,lengthm);
 				if(er==0)
 				{
-					this->done[fd]=true;
+					this->fds[fd]=true;
 					cout << "\nsocket closed before being serviced" <<flush;
+					return "";
 				}
 				else if(er>0)
 				{
@@ -399,9 +458,11 @@ BufferedReader::BufferedReader(propMap props)
 		isSSLEnabled = true;
 	if(props["GFOLB_MMODE"]=="true" || props["GFOLB_MMODE"]=="TRUE")
 		isDefault = true;
-	if(props["REQ_TYPE"]=="true" || props["REQ_TYPE"]=="TRUE")
+	if(props["REQ_TYPE"]=="text" || props["REQ_TYPE"]=="TEXT")
 		isText = true;
 	hdrdelm = props["REQ_DEF_DEL"];
+	boost::replace_all(hdrdelm,"\\r","\r");
+	boost::replace_all(hdrdelm,"\\n","\n");
 	cntlnhdr = props["REQ_CNT_LEN_TXT"];
 	if(!isText && props["BFM_LEN"]=="")
 	{
@@ -445,7 +506,7 @@ BufferedReader::BufferedReader(propMap props)
 	else
 		cout << "SSL is disabled" << endl;
 	//boost::thread r_thread(boost::bind(&readRequests,this));
-	boost::thread g_thread(boost::bind(&generateRequest,this));
+	//boost::thread g_thread(boost::bind(&generateRequest,this));
 }
 
 BufferedReader::~BufferedReader() {
