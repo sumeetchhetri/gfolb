@@ -28,7 +28,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "CryptoHandler.h"
 GodFather::GodFather() {
 	// TODO Auto-generated constructor stub
 
@@ -108,11 +107,32 @@ void signalSIGSEGV(int dummy)
 	//abort();
 }
 
-int main1()
+void service(int fd)
 {
-	char* temp = CryptoHandler::base64decode((unsigned char *)"c3VtZWV0OnN1bWVldA==",20);
-	cout << "after " << temp << endl;
-	return 0;
+	char buf[MAXDATASIZE];
+	int numbytes;
+	while ((numbytes = recv(fd, buf, MAXDATASIZE-1, 0)) == -1)
+	{
+		//perror("recv");
+		if(errno!=EAGAIN)
+			return;
+	}
+	string data(buf,buf+numbytes);
+	memset(&buf[0], 0, sizeof(buf));
+	strVec command;
+	boost::replace_all(data,"\r","");
+	boost::replace_all(data,"\n","");
+	boost::iter_split(command, data, boost::first_finder(" "));
+	if(command.size()<3 || command.at(0)!="OR" || command.at(1)!="CR")
+	{
+		send(fd,"Invalid command",15,0);
+	}
+	else
+	{
+		string flag = ConnectionPool::validate(command);
+		send(fd,flag.c_str(),flag.length(),0);
+	}
+	close(fd);
 }
 
 
@@ -157,6 +177,7 @@ int main(int argc, char* argv[])
 	string mod_mode = props["GFOLB_MMODE"];//Default or Name of module (http,smpp,sip...)
 	string ssl_enb = props["SSL_ENAB"];//is SSL enabled
 	string port_no = props["GFOLB_PORT"];//GFOLB listening port number
+	string admin_port_no = props["GFOLB_ADMIN_PORT"];//GFOLB listening port number
 	strVec ipprts;
 	boost::iter_split(ipprts, serv_addrs, boost::first_finder(";"));
 
@@ -224,6 +245,9 @@ int main(int argc, char* argv[])
     ofs.close();
     IConnectionHandler *handler = new IConnectionHandler(ipprts,con_pers,conn_pool,props);//new IConnectionHandler("localhost",8080,false,10);
     cout << "listening on port "<< port_no << endl;
+
+    Server server(admin_port_no,false,500,&service,true);
+
     ifstream ifs("serv.ctrl");
     int curfds = 1;
     while(ifs.is_open())

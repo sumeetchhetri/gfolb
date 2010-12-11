@@ -84,6 +84,12 @@ void IConnectionHandler::service(int fd,string data)
 	}
 	Connection *conn = ConnectionPool::getConnection();
 	Client client = conn->client;
+	if(!client.isConnected())
+	{
+		this->reader->fds[fd] = true;
+		ConnectionPool::release(conn);
+		return;
+	}
 	int bytes = client.sendData(data);
 	string call,tot;
 	while((call=client.getData())!="")
@@ -117,9 +123,10 @@ void IConnectionHandler::service(int fd,string data)
 IConnectionHandler::IConnectionHandler(vector<string> ipps,bool persistent,int poolsize,propMap props)
 {
 	if(props["GFOLB_MODE"]=="LB" || props["GFOLB_MODE"]=="FO" || props["GFOLB_MODE"]=="CH"
-			|| props["GFOLB_MODE"]=="IR")
+			|| props["GFOLB_MODE"]=="OR")
 	{
 		this->mode = props["GFOLB_MODE"];
+		cout << "GFOLB mode => " << this->mode << endl;
 	}
 	else
 	{

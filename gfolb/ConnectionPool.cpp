@@ -22,7 +22,6 @@
 
 #include "ConnectionPool.h"
 ConnectionPool* ConnectionPool::instance = NULL;
-
 ConnectionPool::ConnectionPool() {
 	// TODO Auto-generated constructor stub
 
