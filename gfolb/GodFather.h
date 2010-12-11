@@ -27,6 +27,7 @@
 #include "vector"
 #include "map"
 using namespace std;
+#include <fcntl.h>
 #include <algorithm>
 #include <cstdlib>
 #include <dlfcn.h>

@@ -1,13 +1,13 @@
 #List of properties for configuring GFOLB
-CONN_PERS=true
+CONN_PERS=false
 REQ_TYPE=text
 REQ_DEF_DEL=\r\n
 REQ_CNT_LEN_TXT=Content-Length: 
 PROT_TYPE=tcp
-SERV_ADDRS=localhost:8087
+SERV_ADDRS=localhost:8080
 GFOLB_MODE=LB
 GFOLB_MMODE=default
 SSL_ENAB=false
-GFOLB_PORT=8086
+GFOLB_PORT=8088
 BFM_LEN=4
-SPOOL_SIZ=4
+SPOOL_SIZ=10

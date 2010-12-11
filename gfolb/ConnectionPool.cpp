@@ -41,7 +41,7 @@ void ConnectionPool::cleanUP()
 }
 
 void ConnectionPool::keepspawiningConnections()
-{
+{try{
 	bool secfld = false;
 	while(true)
 	{
@@ -52,7 +52,7 @@ void ConnectionPool::keepspawiningConnections()
 			set<int> backwhch;
 			for (int var1 = 0; var1 < instance->siz; ++var1)
 			{
-				for (int var = var1*instance->tem; var < var1*instance->tem + instance->tem; ++var)
+				for (int var = var1*instance->tem;var < var1*instance->tem + instance->tem,instance->conns.size()>var; ++var)
 				{
 					if(instance->conns.at(var).destroyed)
 					{
@@ -166,5 +166,5 @@ void ConnectionPool::keepspawiningConnections()
 				}
 			}
 		}
-	}
+	}}catch(...){cout << "exception occurred " << endl;}
 }
