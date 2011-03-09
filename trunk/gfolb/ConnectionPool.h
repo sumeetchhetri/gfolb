@@ -230,7 +230,7 @@ public:
 					{
 						 instance->conns[var].busy = true;
 						 conn = &(instance->conns[var]);
-						 cout << "returned not null conn" << endl;
+						 //cout << "returned not null conn" << endl;
 						 break;
 					}
 					else if(!instance->conns[var].client.isConnected())
@@ -271,8 +271,12 @@ public:
 		else
 		{
 			conn->free();
-			conn->destroyed = true;
+			//conn->destroyed = true;
 		}
+	}
+	static bool isPersistent()
+	{
+		return instance->persi;
 	}
 };
 

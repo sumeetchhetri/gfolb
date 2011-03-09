@@ -28,6 +28,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "SSLClient.h"
 GodFather::GodFather() {
 	// TODO Auto-generated constructor stub
 
@@ -135,7 +136,6 @@ void service(int fd)
 	close(fd);
 }
 
-
 int main(int argc, char* argv[])
 {
 	signal(SIGSEGV,signalSIGSEGV);
@@ -220,7 +220,7 @@ int main(int argc, char* argv[])
         perror("listen");
         exit(1);
     }
-    //fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK);
+    fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK);
     sa.sa_handler = sigchld_handler; // reap all dead processes
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
@@ -311,15 +311,17 @@ int main(int argc, char* argv[])
 				else if(err==10)
 				{
 					handler->add(events[n].data.fd);
-					epoll_ctl(epoll_handle, EPOLL_CTL_DEL, events[n].data.fd,&ev);
-					curfds--;
-					cout << "new valid conn" << endl;
+					//epoll_ctl(epoll_handle, EPOLL_CTL_DEL, events[n].data.fd,&ev);
+					//curfds--;
+					//cout << "new valid conn" << endl;
 					string ind = handler->reader->singleRequest(events[n].data.fd);
-					if(ind!="")
+					//cout << ind.c_str() << endl;
+					if(ind.length()>0)
 					{
+						//cout << "sending pdu" << flush;
 						handler->reader->p_mutex.lock();
-						handler->reader->q[events[n].data.fd].push(ind.c_str());
-						handler->reader->fds[events[n].data.fd]=true;
+						handler->reader->q[events[n].data.fd].push(ind);
+						handler->reader->fds[events[n].data.fd]=false;
 						handler->reader->p_mutex.unlock();
 					}
 

@@ -1,18 +1,18 @@
 /*
-	Copyright 2010, Sumeet Chhetri
+ Copyright 2010, Sumeet Chhetri
 
-    Licensed under the Apache License, Version 2.0 (the "License");
-    you may not use this file except in compliance with the License.
-    You may obtain a copy of the License at
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
 
-        http://www.apache.org/licenses/LICENSE-2.0
+ http://www.apache.org/licenses/LICENSE-2.0
 
-    Unless required by applicable law or agreed to in writing, software
-    distributed under the License is distributed on an "AS IS" BASIS,
-    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-    See the License for the specific language governing permissions and
-    limitations under the License.
-*/
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ */
 /*
  * IConnectionHandler.cpp
  *
@@ -22,35 +22,28 @@
 
 #include "IConnectionHandler.h"
 
-void IConnectionHandler::handle(IConnectionHandler* handler)
-{
+void IConnectionHandler::handle(IConnectionHandler* handler) {
 	handler->reader = new BufferedReader(handler->props);
-	map<int,bool>::iterator it;
+	map<int, bool>::iterator it;
 	vector<int> fdss;
-	while(true)
-	{
+	while (true) {
 		boost::this_thread::sleep(boost::posix_time::milliseconds(1));
-		for(it=handler->fds.begin();it!=handler->fds.end();it++)
-		{
-			if(handler->reader->q.find(it->first)!=handler->reader->q.end()
-					&& !handler->reader->q[it->first].empty())
-			{
+		for (it = handler->fds.begin(); it != handler->fds.end(); it++) {
+			if (handler->reader->q.find(it->first) != handler->reader->q.end()
+					&& !handler->reader->q[it->first].empty()) {
 				string data = handler->reader->q[it->first].front();
 				handler->reader->q[it->first].pop();
-				if(data=="")
-					boost::this_thread::sleep(boost::posix_time::milliseconds(1));
-				else
-				{
-					handler->service(it->first,data);
+				if (data.length()==0)
+					boost::this_thread::sleep(
+							boost::posix_time::milliseconds(1));
+				else {
+					handler->service(it->first, data);
 				}
-			}
-			else if(handler->reader->fds[it->first])
-			{
+			} else if (handler->reader->fds[it->first]) {
 				fdss.push_back(it->first);
 			}
 		}
-		for(int i=0;i<(int)fdss.size();i++)
-		{
+		for (int i = 0; i < (int) fdss.size(); i++) {
 			handler->unbind(fdss.at(i));
 			handler->qmutex.lock();
 			handler->fds.erase(fdss.at(i));
@@ -63,89 +56,83 @@ void IConnectionHandler::handle(IConnectionHandler* handler)
 	}
 }
 
-bool IConnectionHandler::isSockConnected(int fd,int num)
-{
+bool IConnectionHandler::isSockConnected(int fd, int num) {
 	char buf[num];
 	int err;
-	if((err=recv(fd,buf,num,MSG_PEEK))==0)
-	{
+	if ((err = recv(fd, buf, num, MSG_PEEK)) == 0) {
 		cout << "socket closed before being service" << endl;
 		return false;
 	}
 	return true;
 }
 
-void IConnectionHandler::service(int fd,string data)
-{
-	if(!isSockConnected(fd,15))
-	{
+void IConnectionHandler::service(int fd, string data) {
+
+	if (!isSockConnected(fd, 1)) {
 		this->reader->fds[fd] = true;
 		return;
 	}
+
 	Connection *conn = ConnectionPool::getConnection();
 	Client client = conn->client;
-	if(!client.isConnected())
-	{
+	if (!client.isConnected()) {
 		this->reader->fds[fd] = true;
 		ConnectionPool::release(conn);
 		return;
 	}
 	int bytes = client.sendData(data);
-	string call,tot;
-	while((call=client.getData())!="")
-	{
-		tot.append(call);
-	}
+	//cout << bytes << endl;
+	string call, tot;
+	tot = client.getData();
+
 	int toto = tot.length();
-	while(toto>0)
-	{
-		bytes = send(fd,tot.c_str(),tot.length(), 0);
-		cout << tot.length() << "=total and sent="<< bytes<< endl;
-		if(bytes==0 || bytes==-1)
+	//cout << "data=" << toto << endl;
+	while (toto > 0) {
+		bytes = send(fd, tot.c_str(), tot.length(), 0);
+		//cout << tot.length() << "=total and sent=" << bytes << endl;
+		if (bytes == 0 || bytes == -1)
 			break;
 		tot = tot.substr(bytes);
 		toto -= bytes;
 	}
+	if (ConnectionPool::isPersistent()){}
+	else
+	{
+		this->reader->fds[fd] = true;
+		//this->reader->done[fd] = true;
 
-	this->reader->fds[fd] = true;
-	//this->reader->done[fd] = true;
+	}
 	ConnectionPool::release(conn);
-
 	//cout << "done with request" << flush;
 }
 
 /*IConnectionHandler::IConnectionHandler(string ip,int port,bool persistent,int poolsize)
-{
-	boost::thread m_thread(boost::bind(&handle,this));
-	ConnectionPool::createPool(poolsize,ip,port,persistent);
-}*/
+ {
+ boost::thread m_thread(boost::bind(&handle,this));
+ ConnectionPool::createPool(poolsize,ip,port,persistent);
+ }*/
 
-IConnectionHandler::IConnectionHandler(vector<string> ipps,bool persistent,int poolsize,propMap props)
-{
-	if(props["GFOLB_MODE"]=="LB" || props["GFOLB_MODE"]=="FO" || props["GFOLB_MODE"]=="CH"
-			|| props["GFOLB_MODE"]=="OR")
-	{
+IConnectionHandler::IConnectionHandler(vector<string> ipps, bool persistent,
+		int poolsize, propMap props) {
+	if (props["GFOLB_MODE"] == "LB" || props["GFOLB_MODE"] == "FO"
+			|| props["GFOLB_MODE"] == "CH" || props["GFOLB_MODE"] == "OR") {
 		this->mode = props["GFOLB_MODE"];
 		cout << "GFOLB mode => " << this->mode << endl;
-	}
-	else
-	{
+	} else {
 		cout << "Invalid GFOLB mode" << endl;
 		exit(0);
 	}
 	this->props = props;
-	boost::thread m_thread(boost::bind(&handle,this));
-	ConnectionPool::createPool(poolsize,ipps,persistent,this->mode);
+	boost::thread m_thread(boost::bind(&handle, this));
+	ConnectionPool::createPool(poolsize, ipps, persistent, this->mode);
 }
 
-void IConnectionHandler::add(int fd)
-{
-	if(!isSockConnected(fd,12))
-	{
+void IConnectionHandler::add(int fd) {
+	if (!isSockConnected(fd, 12)) {
 		close(fd);
 		return;
 	}
-	cout << "added to conns" << endl;
+	//cout << "added to conns" << endl;
 	//fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
 	qmutex.lock();
 	this->fds[fd] = true;
@@ -161,11 +148,9 @@ IConnectionHandler::~IConnectionHandler() {
 	// TODO Auto-generated destructor stub
 }
 
-bool IConnectionHandler::bind(int fd)
-{
+bool IConnectionHandler::bind(int fd) {
 	return true;
 }
-bool IConnectionHandler::unbind(int fd)
-{
+bool IConnectionHandler::unbind(int fd) {
 	return true;
 }
