@@ -136,7 +136,7 @@ string BufferedReader::singleRequest(int fd)
 	BIO *io=NULL,*ssl_bio=NULL;
 	int cntlen = 0;
 	char buf[MAXBUFLENM];
-	string alldat = "";
+	string alldat;
 	if(isText)
 	{
 		if(isSSLEnabled)
@@ -306,7 +306,7 @@ string BufferedReader::singleRequest(int fd)
 					memset(&buf[0], 0, sizeof(buf));
 					cntlen -= er;
 				}
-				cout << cntlen << " " << er << endl;
+				//cout << cntlen << " " << er << endl;
 			}
 
 			if(io!=NULL)BIO_free_all(io);
@@ -314,7 +314,7 @@ string BufferedReader::singleRequest(int fd)
 	}
 	else
 	{
-		cout << "ISHOULD NVERE BE HERE" << endl;
+		//cout << "ISHOULD NVERE BE HERE" << endl;
 		stringstream ss;
 		if(isSSLEnabled)
 		{
@@ -367,6 +367,7 @@ string BufferedReader::singleRequest(int fd)
 		}
 		else
 		{
+			//cout << bfmlen << flush;
 			int er=-1;
 			if(bfmlen>0)
 			{
@@ -397,6 +398,11 @@ string BufferedReader::singleRequest(int fd)
 			lengthm = ((alldat[0] & 0xff) << 8) | ((alldat[1] & 0xff));
 		else
 			lengthm = ((alldat[0] & 0xff));
+		if(isLengthIncluded)
+		{
+			lengthm -= bfmlen;
+		}
+		//cout << lengthm << flush;
 		if(isSSLEnabled)
 		{
 			int er=-1;
@@ -434,6 +440,7 @@ string BufferedReader::singleRequest(int fd)
 			if(lengthm>0)
 			{
 				er = BIO_read(io,buf,lengthm);
+				//cout << er << endl;
 				if(er==0)
 				{
 					this->fds[fd]=true;
@@ -443,12 +450,16 @@ string BufferedReader::singleRequest(int fd)
 				else if(er>0)
 				{
 					for(int i=0;i<er;i++)
+					{
+						//cout << "=" << buf[i] << endl;
 						alldat.push_back(buf[i]);
+					}
 					memset(&buf[0], 0, sizeof(buf));
 				}
 			}
 		}
 	}
+	//cout << alldat << flush;
 	return alldat;
 }
 
@@ -464,6 +475,8 @@ BufferedReader::BufferedReader(propMap props)
 	boost::replace_all(hdrdelm,"\\r","\r");
 	boost::replace_all(hdrdelm,"\\n","\n");
 	cntlnhdr = props["REQ_CNT_LEN_TXT"];
+	if(props["BFM_INC_LEN"]=="true" || props["BFM_INC_LEN"]=="TRUE")
+		isLengthIncluded = true;
 	if(!isText && props["BFM_LEN"]=="")
 	{
 		cout << "invalid message length specified in BFM_LEN" << endl;
@@ -496,6 +509,7 @@ BufferedReader::BufferedReader(propMap props)
 	{
 		cout << "Protocol Type = binary" << endl;
 		cout << "Binary message length = " << bfmlen << endl;
+		cout << "Includes Length = " << props["BFM_INC_LEN"] << endl;
 	}
 	if(isDefault)
 		cout << "Module Type = default" << endl;

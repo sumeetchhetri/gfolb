@@ -85,7 +85,7 @@ bool Client::connection(string host,int port)
 
     freeaddrinfo(servinfo); // all done with this structure
 
-    fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK);
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);
     /*if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
         perror("recv");
         exit(1);

@@ -49,7 +49,7 @@ class BufferedReader {
 	static void generateRequest(BufferedReader* reader);
 	static void read();
 	map<int,string> data;
-	bool isSSLEnabled,isDefault,isText;
+	bool isSSLEnabled,isDefault,isText,isLengthIncluded;
 	int bfmlen;
 	string hdrdelm,cntlnhdr;
 
