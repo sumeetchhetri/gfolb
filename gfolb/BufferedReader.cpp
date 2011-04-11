@@ -129,6 +129,16 @@ void BufferedReader::erase(int fd)
 	this->p_mutex.unlock();
 }
 
+int getLength(string header,int size)
+{
+	int totsize = header[size-1] & 0xff;
+	for (int var = 0; var < size-1; var++)
+	{
+		totsize |= ((header[var] & 0xff) << (size-1-var)*8);
+	}
+	return totsize;
+}
+
 string BufferedReader::singleRequest(int fd)
 {
 	SSL *ssl=NULL;
@@ -389,15 +399,15 @@ string BufferedReader::singleRequest(int fd)
 				}
 			}
 		}
-		int lengthm;
-		if(bfmlen==4)
+		int lengthm = getLength(alldat,bfmlen);
+		/*if(bfmlen==4)
 			lengthm = ((alldat[0] & 0xff) << 24) | ((alldat[1] & 0xff) << 16) | ((alldat[2] & 0xff) << 8) | ((alldat[3] & 0xff));
 		else if(bfmlen==3)
 			lengthm = ((alldat[0] & 0xff) << 16) | ((alldat[1] & 0xff) << 8) | ((alldat[2] & 0xff));
 		else if(bfmlen==2)
 			lengthm = ((alldat[0] & 0xff) << 8) | ((alldat[1] & 0xff));
 		else
-			lengthm = ((alldat[0] & 0xff));
+			lengthm = ((alldat[0] & 0xff));*/
 		if(isLengthIncluded)
 		{
 			lengthm -= bfmlen;
