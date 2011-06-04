@@ -10,7 +10,8 @@ gfolb has a configuration file named gfolb.properties namely,
 CONN_PERS=false
 #Servers in the pool support text based protocol(HTTP/SIP) or binary protocols (SMPP/ISO-8583)
 REQ_TYPE=text
-#If servers in the pool support text based protocols, how are headers in the request delimited (Http \r\n is the delimiter)
+#If servers in the pool support text based protocols, how are headers in the request delimited
+(Http \r\n is the delimiter)
 REQ_DEF_DEL=\r\n
 #If servers in the pool support text based protocols, which header has the length of the actual content
 REQ_CNT_LEN_TXT=Content-Length: 
