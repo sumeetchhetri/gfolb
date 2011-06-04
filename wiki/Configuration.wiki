@@ -31,7 +31,8 @@ SSL_ENAB=false
 GFOLB_PORT=8088
 #GFOLB administration port, where commands can be fired for online routing mode
 GFOLB_ADMIN_PORT=8089
-#In case of binary protocols, the length of the request message is defined in the initial bytes of the message, in such cases the Length header size (For SMPP length header value is 4)
+#In case of binary protocols, the length of the request message is defined in the initial bytes of the message, 
+in such cases the Length header size (For SMPP length header value is 4)
 BFM_LEN=4
 #For binary protocols does the length header include itself in the message size
 BFM_INC_LEN=true
