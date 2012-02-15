@@ -55,7 +55,7 @@ class ConnectionPool {
 	int siz;
 	int num,tem;
 	int fonum;
-	bool persi;
+	bool persi,sock_blkg;
 	int onlineroute;
 public:
 	/*static void createPool(int num,string ip,int port,bool persistent)
@@ -265,6 +265,7 @@ public:
 	{
 		if(!instance->persi)
 		{
+			conn->client.closeConnection();
 			conn->~Connection();
 			delete conn;
 		}

@@ -9,6 +9,7 @@ CPP_SRCS += \
 ../ConnectionPool.cpp \
 ../GodFather.cpp \
 ../IConnectionHandler.cpp \
+../Server.cpp \
 ../PropFileReader.cpp 
 
 OBJS += \
@@ -17,6 +18,7 @@ OBJS += \
 ./ConnectionPool.o \
 ./GodFather.o \
 ./IConnectionHandler.o \
+./Server.o \
 ./PropFileReader.o 
 
 CPP_DEPS += \
@@ -25,6 +27,7 @@ CPP_DEPS += \
 ./ConnectionPool.d \
 ./GodFather.d \
 ./IConnectionHandler.d \
+./Server.d \
 ./PropFileReader.d 
 
 

@@ -38,8 +38,9 @@
 #include "string"
 #include "boost/lexical_cast.hpp"
 #include "cstring"
+#include <boost/thread/thread.hpp>
 using namespace std;
-#define MAXDATASIZE 100
+#define MAXDATASIZE 2048
 class Client {
 	bool connected;
 	int sockfd;
@@ -48,9 +49,17 @@ public:
 	virtual ~Client();
 	bool connection(string,int);
 	int sendData(string);
-	string getData();
+	string getTextData();
+	string getBinaryData(int,bool);
 	void closeConnection();
 	bool isConnected();
+	void setSocketBlocking();
+	void setSocketNonBlocking();
+	int receive(string buf,int flag);
+	int receivelen(string buf,int len,int flag);
+
+	int send(string buf);
+	int sendlen(string buf,int len);
 };
 
 #endif /* CLIENT_H_ */

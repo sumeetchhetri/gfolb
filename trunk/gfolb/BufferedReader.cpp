@@ -242,6 +242,8 @@ string BufferedReader::singleRequest(int fd)
 					break;
 				}
 				string temp(buf);
+				//if(temp.find("Range:")==0 || temp.find("If-Range:")==0)
+				//	continue;
 				temp = temp.substr(0,temp.length()-1);
 				alldat += (temp + "\n");
 				//cout << temp <<endl;
@@ -412,7 +414,7 @@ string BufferedReader::singleRequest(int fd)
 		{
 			lengthm -= bfmlen;
 		}
-		//cout << lengthm << flush;
+		cout << lengthm << flush;
 		if(isSSLEnabled)
 		{
 			int er=-1;

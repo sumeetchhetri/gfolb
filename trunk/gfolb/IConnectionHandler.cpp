@@ -80,10 +80,28 @@ void IConnectionHandler::service(int fd, string data) {
 		ConnectionPool::release(conn);
 		return;
 	}
+	if(this->reader->isTextData())
+	{
+		boost::replace_first(data, "Connection: keep-alive", "Connection: close");
+		boost::replace_first(data, "Connection: Keep-alive", "Connection: close");
+		boost::replace_first(data, "Connection: Keep-Alive", "Connection: close");
+		boost::replace_first(data, "Connection: keep-Alive", "Connection: close");
+	}
+	//boost::replace_first(data, "HTTP/1.1", "HTTP/1.0");
 	int bytes = client.sendData(data);
-	//cout << bytes << endl;
+	cout << "===================Request START===================" << endl;
+	cout << data << endl;
+	cout << "====================Request END====================" << endl;
+
 	string call, tot;
-	tot = client.getData();
+	if(!this->reader->isTextData())
+		tot = client.getBinaryData(this->reader->getHeaderLength(), this->reader->isHeaderLengthIncluded());
+	else
+		tot = client.getTextData();
+	//tot += client.getData();
+	cout << "===================Response START===================" << endl;
+	cout << tot << endl;
+	cout << "====================Response END====================" << endl;
 
 	int toto = tot.length();
 	//cout << "data=" << toto << endl;
@@ -133,7 +151,7 @@ void IConnectionHandler::add(int fd) {
 		return;
 	}
 	//cout << "added to conns" << endl;
-	//fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
+	fcntl(fd, F_SETFL, fcntl(fd, F_GETFD, 0) | O_NONBLOCK);
 	qmutex.lock();
 	this->fds[fd] = true;
 	qmutex.unlock();
@@ -149,8 +167,23 @@ IConnectionHandler::~IConnectionHandler() {
 }
 
 bool IConnectionHandler::bind(int fd) {
+	/*if(props["MOD_NAME"]!="" && !this->reader->isTextData())
+	{
+		dlib = dlopen("libmodule.so", RTLD_NOW|RTLD_GLOBAL);
+		if(dlib==NULL)
+		{
+			cout << dlerror() << endl;
+			Logger::info("Could not load Library");
+		}
+		else
+		{
+			Logger::info("Library loaded successfully");
+
+		}
+	}*/
 	return true;
 }
+
 bool IConnectionHandler::unbind(int fd) {
 	return true;
 }

@@ -1,15 +1,16 @@
 #List of properties for configuring GFOLB
-CONN_PERS=false
-REQ_TYPE=text
+CONN_PERS=true
+REQ_TYPE=binary
 REQ_DEF_DEL=\r\n
 REQ_CNT_LEN_TXT=Content-Length: 
 PROT_TYPE=tcp
-SERV_ADDRS=google.com:80
-GFOLB_MODE=OR
+SERV_ADDRS=localhost:8057;localhost:8058
+GFOLB_MODE=LB
 GFOLB_MMODE=default
 SSL_ENAB=false
-GFOLB_PORT=8088
+GFOLB_PORT=2775
 GFOLB_ADMIN_PORT=8089
 BFM_LEN=4
 BFM_INC_LEN=true
-SPOOL_SIZ=10
+SPOOL_SIZ=2
+MOD_NAME=smpp
