@@ -26,6 +26,7 @@
 #include "ConnectionPool.h"
 #include "Client.h"
 #include <fcntl.h>
+#include <dlfcn.h>
 class IConnectionHandler {
 
 	propMap props;
@@ -35,6 +36,7 @@ class IConnectionHandler {
 	string mode;
 	bool isSockConnected(int fd,int);
 	boost::mutex qmutex;
+	void* dlib;
 public:
 	BufferedReader *reader;
 	//IConnectionHandler(string ip,int port,bool persistent,int poolsize);

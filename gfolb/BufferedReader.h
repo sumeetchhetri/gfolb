@@ -61,6 +61,9 @@ public:
 	map<int,queue<string> > q;
 	BufferedReader(propMap props);
 	virtual ~BufferedReader();
+	bool isTextData(){return isText;}
+	int getHeaderLength(){return bfmlen;}
+	bool isHeaderLengthIncluded(){return isLengthIncluded;}
 };
 
 #endif /* BUFFEREDREADER_H_ */
