@@ -37,7 +37,8 @@ void IConnectionHandler::handle(IConnectionHandler* handler) {
 					boost::this_thread::sleep(
 							boost::posix_time::milliseconds(1));
 				else {
-					handler->service(it->first, data);
+					boost::thread m_thread(boost::bind(&service, it->first, data, handler));
+					//handler->service(it->first, data);
 				}
 			} else if (handler->reader->fds[it->first]) {
 				fdss.push_back(it->first);
@@ -66,26 +67,35 @@ bool IConnectionHandler::isSockConnected(int fd, int num) {
 	return true;
 }
 
-void IConnectionHandler::service(int fd, string data) {
+void IConnectionHandler::service(int fd, string data, IConnectionHandler* handler) {
 
-	if (!isSockConnected(fd, 1)) {
-		this->reader->fds[fd] = true;
+	if (!handler->isSockConnected(fd, 1)) {
+
+		handler->reader->p_mutex.lock();
+		handler->reader->fds[fd] = true;
+		handler->reader->p_mutex.unlock();
+
 		return;
 	}
 
 	Connection *conn = ConnectionPool::getConnection();
 	Client client = conn->client;
 	if (!client.isConnected()) {
-		this->reader->fds[fd] = true;
+
+		handler->reader->p_mutex.lock();
+		handler->reader->fds[fd] = true;
+		handler->reader->p_mutex.unlock();
+
 		ConnectionPool::release(conn);
 		return;
 	}
-	if(this->reader->isTextData())
+	if(handler->reader->isTextData())
 	{
 		boost::replace_first(data, "Connection: keep-alive", "Connection: close");
 		boost::replace_first(data, "Connection: Keep-alive", "Connection: close");
 		boost::replace_first(data, "Connection: Keep-Alive", "Connection: close");
 		boost::replace_first(data, "Connection: keep-Alive", "Connection: close");
+		boost::replace_first(data, "{REPLACE_HOST_f2079930-4a8b-11e2-bcfd-0800200c9a66}", conn->host);
 	}
 	//boost::replace_first(data, "HTTP/1.1", "HTTP/1.0");
 	int bytes = client.sendData(data);
@@ -94,8 +104,8 @@ void IConnectionHandler::service(int fd, string data) {
 	cout << "====================Request END====================" << endl;
 
 	string call, tot;
-	if(!this->reader->isTextData())
-		tot = client.getBinaryData(this->reader->getHeaderLength(), this->reader->isHeaderLengthIncluded());
+	if(!handler->reader->isTextData())
+		tot = client.getBinaryData(handler->reader->getHeaderLength(), handler->reader->isHeaderLengthIncluded());
 	else
 		tot = client.getTextData();
 	//tot += client.getData();
@@ -116,8 +126,10 @@ void IConnectionHandler::service(int fd, string data) {
 	if (ConnectionPool::isPersistent()){}
 	else
 	{
-		this->reader->fds[fd] = true;
-		//this->reader->done[fd] = true;
+		handler->reader->p_mutex.lock();
+		handler->reader->fds[fd] = true;
+		handler->reader->p_mutex.unlock();
+		//reader->done[fd] = true;
 
 	}
 	ConnectionPool::release(conn);

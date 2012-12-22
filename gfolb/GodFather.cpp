@@ -136,6 +136,27 @@ void service(int fd)
 	close(fd);
 }
 
+void getRequest(int fd, IConnectionHandler *handler)
+{
+	/*struct timeval timeout;
+	timeout.tv_sec = 0;
+	timeout.tv_usec = 5000;
+	if (setsockopt (fd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout)) < 0)
+	{
+		cout << "cannot set receive timeout" << endl;
+	}*/
+	string ind = handler->reader->singleRequest(fd);
+	//cout << ind.c_str() << endl;
+	if(ind.length()>0)
+	{
+		//cout << "sending pdu" << flush;
+		handler->reader->p_mutex.lock();
+		handler->reader->q[fd].push(ind);
+		handler->reader->fds[fd]=false;
+		handler->reader->p_mutex.unlock();
+	}
+}
+
 int main(int argc, char* argv[])
 {
 	signal(SIGSEGV,signalSIGSEGV);
@@ -314,17 +335,7 @@ int main(int argc, char* argv[])
 					//epoll_ctl(epoll_handle, EPOLL_CTL_DEL, events[n].data.fd,&ev);
 					//curfds--;
 					//cout << "new valid conn" << endl;
-					string ind = handler->reader->singleRequest(events[n].data.fd);
-					//cout << ind.c_str() << endl;
-					if(ind.length()>0)
-					{
-						//cout << "sending pdu" << flush;
-						handler->reader->p_mutex.lock();
-						handler->reader->q[events[n].data.fd].push(ind);
-						handler->reader->fds[events[n].data.fd]=false;
-						handler->reader->p_mutex.unlock();
-					}
-
+					boost::thread m_thread(boost::bind(getRequest, events[n].data.fd, handler));
 				}
 			}
 		}

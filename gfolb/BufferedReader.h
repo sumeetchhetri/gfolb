@@ -34,6 +34,7 @@
 #include <boost/lexical_cast.hpp>
 #include "PropFileReader.h"
 #include <fcntl.h>
+#include <errno.h>
 #define CLIENT_AUTH_REQUEST 1
 #define CLIENT_AUTH_REQUIRE 2
 #define CLIENT_AUTH_REHANDSHAKE 3
@@ -52,7 +53,6 @@ class BufferedReader {
 	bool isSSLEnabled,isDefault,isText,isLengthIncluded;
 	int bfmlen;
 	string hdrdelm,cntlnhdr;
-
 public:
 	boost::mutex p_mutex;
 	string singleRequest(int);

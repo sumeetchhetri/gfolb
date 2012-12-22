@@ -55,10 +55,9 @@ public:
 	bool isConnected();
 	void setSocketBlocking();
 	void setSocketNonBlocking();
-	int receive(string buf,int flag);
-	int receivelen(string buf,int len,int flag);
+	int receive(string& buf,int flag);
+	int receivelen(string& buf,int len,int flag);
 
-	int send(string buf);
 	int sendlen(string buf,int len);
 };
 

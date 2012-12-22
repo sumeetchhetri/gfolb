@@ -22,6 +22,7 @@
 
 #include "ConnectionPool.h"
 ConnectionPool* ConnectionPool::instance = NULL;
+
 ConnectionPool::ConnectionPool() {
 	// TODO Auto-generated constructor stub
 
@@ -33,137 +34,416 @@ ConnectionPool::~ConnectionPool() {
 
 void ConnectionPool::cleanUP()
 {
+	instance->cpmutex.lock();
 	for (int var = 0; var < (int)instance->conns.size(); ++var)
 	{
 		instance->conns.at(var).client.closeConnection();
 	}
+	instance->cpmutex.unlock();
 }
 
 void ConnectionPool::keepspawiningConnections()
-{try{
-	bool secfld = false;
-	while(true)
-	{
-		boost::this_thread::sleep(boost::posix_time::milliseconds(10));
-		if(instance->mode=="LB")
+{
+	try{
+		bool secfld = false;
+		while(true)
 		{
-			vector<int> backlog;
-			set<int> backwhch;
-			for (int var1 = 0; var1 < instance->siz; ++var1)
+			boost::this_thread::sleep(boost::posix_time::milliseconds(10));
+			if(instance->mode=="LB")
 			{
-				for (int var = var1*instance->tem;var < var1*instance->tem + instance->tem,instance->conns.size()>var; ++var)
+				vector<int> backlog;
+				set<int> backwhch;
+				for (int var1 = 0; var1 < instance->siz; ++var1)
 				{
-					if(instance->conns.at(var).destroyed)
+					for (int var = var1*instance->tem;var < var1*instance->tem + instance->tem,instance->conns.size()>var; ++var)
 					{
-						cout << "respawned destroyed connection" << flush;
-						instance->conns.at(var).client.closeConnection();
-						Connection conn;
-						Client client;
-						bool flag = client.connection(instance->ip.at(var1),instance->port.at(var1));
-						if(!flag)
+						if(instance->conns.at(var).destroyed)
 						{
-							backlog.push_back(var);
+							cout << "respawned destroyed connection" << flush;
+
+							instance->cpmutex.lock();
+							instance->conns.at(var).client.closeConnection();
+							instance->cpmutex.unlock();
+
+							Connection conn;
+							Client client;
+							bool flag = client.connection(instance->ip.at(var1),instance->port.at(var1));
+							if(!flag)
+							{
+								backlog.push_back(var);
+							}
+							else
+							{
+								conn.client = client;
+								conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?boost::lexical_cast<string>(instance->port.at(var1)):"");
+
+								instance->cpmutex.lock();
+								instance->conns[var] = conn;
+								instance->cpmutex.unlock();
+							}
+						}
+						else if(!instance->conns.at(var).client.isConnected())
+						{
+							Connection conn;
+							Client client;
+							bool flag = client.connection(instance->ip.at(var1),instance->port.at(var1));
+							if(!flag)
+							{
+								backlog.push_back(var);
+							}
+							else
+							{
+								conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?boost::lexical_cast<string>(instance->port.at(var1)):"");
+								conn.client = client;
+
+								instance->cpmutex.lock();
+								instance->conns[var] = conn;
+								instance->cpmutex.unlock();
+							}
 						}
 						else
 						{
-							conn.client = client;
-							instance->conns[var] = conn;
+							backwhch.insert(var1);
 						}
 					}
-					else if(!instance->conns.at(var).client.isConnected())
+				}
+				if(backwhch.size()>0 && backlog.size()>0)
+				{
+					set<int>::iterator it;
+					int backeach = backlog.size()/backwhch.size();
+					int backeachrem = backlog.size()%backwhch.size();
+					int cnt = 0;
+					for (it=backwhch.begin();it!=backwhch.end();++it,cnt++)
 					{
-						Connection conn;
-						Client client;
-						bool flag = client.connection(instance->ip.at(var1),instance->port.at(var1));
-						if(!flag)
+						for (int var2 = cnt*backeach; var2 < cnt*backeach+backeach; ++var2)
 						{
-							backlog.push_back(var);
-						}
-						else
-						{
-							conn.client = client;
-							instance->conns[var] = conn;
+							Connection conn;
+							Client client;
+							bool flag = client.connection(instance->ip.at(*it),instance->port.at(*it));
+							if(flag)
+							{
+								conn.host = instance->ip.at(*it) + (instance->port.at(*it)!=80?boost::lexical_cast<string>(instance->port.at(*it)):"");
+								conn.client = client;
+
+								instance->cpmutex.lock();
+								instance->conns[var2] = conn;
+								instance->cpmutex.unlock();
+							}
+							else
+								break;
 						}
 					}
-					else
+					for (it=backwhch.begin();it!=backwhch.end();++it,cnt++)
 					{
-						backwhch.insert(var1);
+						while(backeachrem>0)
+						{
+							Connection conn;
+							Client client;
+							bool flag = client.connection(instance->ip.at(*it),instance->port.at(*it));
+							if(flag)
+							{
+								conn.client = client;
+								conn.host = instance->ip.at(*it) + (instance->port.at(*it)!=80?boost::lexical_cast<string>(instance->port.at(*it)):"");
+
+								instance->cpmutex.lock();
+								instance->conns[cnt*backeach+backeachrem] = conn;
+								instance->cpmutex.unlock();
+							}
+							else
+								break;
+							backeachrem--;
+						}
 					}
 				}
 			}
-			if(backwhch.size()>0 && backlog.size()>0)
+			else if(instance->mode=="FO")
 			{
-				set<int>::iterator it;
-				int backeach = backlog.size()/backwhch.size();
-				int backeachrem = backlog.size()%backwhch.size();
-				int cnt = 0;
-				for (it=backwhch.begin();it!=backwhch.end();++it,cnt++)
+				if(instance->fonum==0)
 				{
-					for (int var2 = cnt*backeach; var2 < cnt*backeach+backeach; ++var2)
-					{
-						Connection conn;
-						Client client;
-						bool flag = client.connection(instance->ip.at(*it),instance->port.at(*it));
-						if(flag)
-						{
-							conn.client = client;
-							instance->conns[var2] = conn;
-						}
-						else
-							break;
-					}
+					cout << "Now trying Primary again.." << endl;
+					cout << "Will quit if this fails.." << endl;
 				}
-				for (it=backwhch.begin();it!=backwhch.end();++it,cnt++)
+				for (int var = 0; var < instance->num; ++var)
 				{
-					while(backeachrem>0)
+					if(!instance->conns.at(var).client.isConnected())
 					{
 						Connection conn;
 						Client client;
-						bool flag = client.connection(instance->ip.at(*it),instance->port.at(*it));
-						if(flag)
+						bool flag = client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+						if(!flag)
 						{
-							conn.client = client;
-							instance->conns[cnt*backeach+backeachrem] = conn;
+							cout << "Failover Secondary link failed..." << endl;
+
+							instance->cpmutex.lock();
+							instance->fonum = 0;
+							instance->cpmutex.unlock();
+
+							secfld = client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+							if(secfld)
+							{
+								cout << "Both links down will quit now..." << endl;
+								cleanUP();
+								exit(-1);
+							}
+							else
+								break;
 						}
-						else
-							break;
-						backeachrem--;
+						conn.host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
+						conn.client = client;
+
+						instance->cpmutex.lock();
+						instance->conns[var] = conn;
+						instance->cpmutex.unlock();
 					}
 				}
 			}
 		}
-		else if(instance->mode=="FO")
+	}
+	catch(...)
+	{
+		cout << "exception occurred " << endl;
+	}
+}
+
+void ConnectionPool::createPool(int num,vector<string> ipprts,bool persistent,string mode)
+{
+	if(instance==NULL)
+	{
+		instance = new ConnectionPool();
+		instance->mode = mode;
+		instance->persi = persistent;
+		instance->num = num;
+		instance->fonum = 0;
+		instance->onlineroute = 0;
+		for (int var = 0; var < (int)ipprts.size(); ++var)
 		{
-			if(instance->fonum==0)
+			string whl = ipprts.at(var);
+			instance->ip.push_back(whl.substr(0,whl.find(":")));
+			try
 			{
-				cout << "Now trying Primary again.." << endl;
-				cout << "Will quit if this fails.." << endl;
+				int por = boost::lexical_cast<int>(whl.substr(whl.find(":")+1));
+				instance->port.push_back(por);
 			}
-			for (int var = 0; var < instance->num; ++var)
+			catch(...)
 			{
-				if(!instance->conns.at(var).client.isConnected())
+				cout << "invalid port specified" << endl;
+				exit(-1);
+			}
+		}
+		instance->tem = num;
+		instance->num = num;
+		instance->siz = (int)instance->ip.size();
+		if(mode=="LB")
+		{
+			instance->tem = num/(int)instance->ip.size();
+			instance->num = instance->tem*(int)instance->ip.size();
+		}
+		if(persistent)
+		{
+			for (int var1 = 0; var1 < (int)instance->siz; ++var1)
+			{
+				for (int var = 0; var < instance->tem; ++var)
 				{
 					Connection conn;
 					Client client;
-					bool flag = client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
-					if(!flag)
-					{
-						cout << "Failover Secondary link failed..." << endl;
-						instance->fonum = 0;
-						secfld = true;
-						if(secfld)
-						{
-							cout << "Both links down will quit now..." << endl;
-							cleanUP();
-							exit(-1);
-						}
-						else
-							break;
-					}
+					client.connection(instance->ip.at(var1),instance->port.at(var1));
+					if(!client.isConnected())
+						break;
 					conn.client = client;
-					instance->conns[var] = conn;
+					conn.destroyed = false;
+					conn.busy = false;
+					conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?boost::lexical_cast<string>(instance->port.at(var1)):"");
+					instance->conns.push_back(conn);
+				}
+			}
+			if(instance->conns.size()==0)
+			{
+				cout << "No servers available" << endl;
+				exit(0);
+			}
+			cout << "pool persistent" << flush;
+			boost::thread g_thread(boost::bind(&keepspawiningConnections));
+		}
+		else
+		{
+			cout << "pool not persistent" << flush;
+		}
+		cout << "\ninitialised connection pool\n" << flush;
+	}
+	cout << instance << endl;
+}
+
+Connection* ConnectionPool::getConnection()
+{
+	Connection* conn = NULL;
+	if(!instance->persi)
+	{
+		Connection* con = new Connection;
+		int tries = 0;
+		string msg;
+		if(instance->mode=="LB")
+		{
+			if(instance->fonum==instance->siz)
+			{
+				instance->cpmutex.lock();
+				instance->fonum = 0;
+				instance->cpmutex.unlock();
+			}
+			con->host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
+			con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+			{
+				instance->cpmutex.lock();
+				instance->fonum++;
+				instance->cpmutex.unlock();
+			}
+			msg = "no servers available";
+		}
+		else if(instance->mode=="FO")
+		{
+			con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+
+			instance->cpmutex.lock();
+			if(instance->fonum==1)
+			{
+				instance->fonum = 0;
+			}
+			else
+			{
+				instance->fonum = 1;
+			}
+			instance->cpmutex.unlock();
+			con->host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
+			msg = "no servers available to switch over to";
+		}
+		else if(instance->mode=="OR")
+		{
+			ifstream ifs("o_data");
+			if(ifs.is_open())
+			{
+				string temp;
+				getline(ifs,temp);
+				try
+				{
+					int nwrt = boost::lexical_cast<int>(temp);
+					instance->cpmutex.lock();
+					instance->onlineroute = nwrt;
+					instance->cpmutex.unlock();
+					cout << "got the changed route " << nwrt << endl;
+				}
+				catch(...)
+				{
+				}
+				remove("o_data");
+			}
+			cout << instance->onlineroute << endl;
+			con->client.connection(instance->ip.at(instance->onlineroute),instance->port.at(instance->onlineroute));
+			return con;
+		}
+		while(!con->client.isConnected())
+		{
+			if(instance->mode=="FO")
+			{
+				instance->cpmutex.lock();
+				instance->fonum++;
+				instance->cpmutex.unlock();
+			}
+			if(instance->fonum==instance->siz)
+			{
+				tries++;
+				instance->cpmutex.lock();
+				instance->fonum = 0;
+				instance->cpmutex.unlock();
+				if(tries==3)
+				{
+					cout << msg << endl;
+					exit(0);
+				}
+			}
+			con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+			if(instance->mode=="LB")
+			{
+				instance->cpmutex.lock();
+				instance->fonum++;
+				instance->cpmutex.unlock();
+				if(instance->fonum==instance->siz)
+				{
+					instance->cpmutex.lock();
+					instance->fonum = 0;
+					instance->cpmutex.unlock();
 				}
 			}
 		}
-	}}catch(...){cout << "exception occurred " << endl;}
+		return con;
+	}
+	else
+	{
+		while(conn==NULL)
+		{
+			for (int var = 0; var < (int)instance->conns.size(); ++var)
+			{
+				if(!instance->conns[var].busy && !instance->conns[var].destroyed
+						&& instance->conns[var].client.isConnected())
+				{
+					instance->cpmutex.lock();
+					instance->conns[var].busy = true;
+					instance->cpmutex.unlock();
+					conn = &(instance->conns[var]);
+					//cout << "returned not null conn" << endl;
+					break;
+				}
+				else if(!instance->conns[var].client.isConnected())
+				{
+					instance->cpmutex.lock();
+					instance->conns[var].destroyed = true;
+					instance->cpmutex.unlock();
+				}
+			}
+			boost::this_thread::sleep(boost::posix_time::milliseconds(1));
+		}
+	}
+	return conn;
+}
+
+string ConnectionPool::validate(vector<string> cmd)
+{
+	try
+	{
+		cout << instance << endl;
+		int nwrt = boost::lexical_cast<int>(cmd.at(2));
+		ofstream ofs("o_data");
+		ofs.write(cmd.at(2).c_str(),cmd.at(2).length());
+		ofs.close();
+		cout << "changed route " << nwrt << endl;
+	}
+	catch(...)
+	{
+		return "INVALID ARGUMENT";
+	}
+	return "COMMAND SUCCESSFULL";
+}
+
+void ConnectionPool::release(Connection *conn)
+{
+	if(!instance->persi)
+	{
+		delete conn;
+	}
+	else
+	{
+		conn->free();
+		//conn->destroyed = true;
+	}
+}
+
+bool ConnectionPool::isPersistent()
+{
+	return instance->persi;
+}
+
+Connection::Connection()
+{}
+
+Connection::~Connection()
+{
+	client.closeConnection();
 }

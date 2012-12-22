@@ -32,7 +32,7 @@ class IConnectionHandler {
 	propMap props;
 	map<int,bool> fds;
 	static void handle(IConnectionHandler* handler);
-	void service(int fd,string data);
+	static void service(int fd,string data,IConnectionHandler* handler);
 	string mode;
 	bool isSockConnected(int fd,int);
 	boost::mutex qmutex;
