@@ -162,23 +162,29 @@ string Client::getTextData()
 	{
 		perror("Error receiving data");
 	}
+	memset(buf, 0, sizeof(buf));
 	//cout << alldat.length() << endl;
 	return alldat;
 }
 
-int Client::receive(string buf,int flag)
+int Client::receive(string& buf,int flag)
 {
-	return recv(sockfd, buf.c_str(), buf.length(), flag);
+	char buff[BUFSIZ+1];
+	memset(buff, 0, sizeof(buff));
+	int t = recv(sockfd, buff, BUFSIZ, flag);
+	buf = buff;
+	memset(buff, 0, sizeof(buff));
+	return t;
 }
 
-int Client::receivelen(string buf,int len, int flag)
+int Client::receivelen(string& buf,int len, int flag)
 {
-	return recv(sockfd, buf.c_str(), len, flag);
-}
-
-int Client::send(string buf)
-{
-	return send(sockfd, buf.c_str(), buf.length(), 0);
+	char buff[len+1];
+	memset(buff, 0, sizeof(buff));
+	int t = recv(sockfd, buff, len, flag);
+	buf = buff;
+	memset(buff, 0, sizeof(buff));
+	return t;
 }
 
 int Client::sendlen(string buf,int len)

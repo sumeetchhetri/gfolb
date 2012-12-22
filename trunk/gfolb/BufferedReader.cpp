@@ -245,6 +245,10 @@ string BufferedReader::singleRequest(int fd)
 				//if(temp.find("Range:")==0 || temp.find("If-Range:")==0)
 				//	continue;
 				temp = temp.substr(0,temp.length()-1);
+				if(temp.find("Host:")!=string::npos)
+				{
+					temp = "Host: {REPLACE_HOST_f2079930-4a8b-11e2-bcfd-0800200c9a66}";
+				}
 				alldat += (temp + "\n");
 				//cout << temp <<endl;
 				if(temp.find(this->cntlnhdr)!=string::npos)
@@ -261,11 +265,12 @@ string BufferedReader::singleRequest(int fd)
 						cout << "bad lexical cast" <<endl;
 					}
 				}
+
 				memset(&buf[0], 0, sizeof(buf));
 			}
-			if(io!=NULL && cntlen==0)BIO_free_all(io);
+			//if(io!=NULL && cntlen==0)BIO_free_all(io);
 		}
-		if(isSSLEnabled && cntlen>0)
+		if(isSSLEnabled)
 		{
 			int er=-1;
 			if(cntlen>0)
@@ -305,6 +310,31 @@ string BufferedReader::singleRequest(int fd)
 			{
 				er = BIO_read(io,buf,cntlen);
 				if(er==0)
+				{
+					this->fds[fd]=true;
+					if(io!=NULL)BIO_free_all(io);
+					cout << "\nsocket closed before being serviced" <<flush;
+					return "";
+				}
+				else if(er>0)
+				{
+					string temp(buf);
+					alldat += (temp);
+					memset(&buf[0], 0, sizeof(buf));
+					cntlen -= er;
+				}
+				//cout << cntlen << " " << er << endl;
+			}
+
+			if(io!=NULL)BIO_free_all(io);
+		}
+		else
+		{
+			int er=-1;
+			while(cntlen>0)
+			{
+				er = BIO_read(io,buf,cntlen);
+				if(er<=0 && errno !=EWOULDBLOCK)
 				{
 					this->fds[fd]=true;
 					if(io!=NULL)BIO_free_all(io);
