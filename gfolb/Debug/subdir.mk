@@ -5,7 +5,9 @@
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
 ../BufferedReader.cpp \
+../ClientInterface.cpp \
 ../Client.cpp \
+../SSLClient.cpp \
 ../ConnectionPool.cpp \
 ../GodFather.cpp \
 ../IConnectionHandler.cpp \
@@ -14,7 +16,9 @@ CPP_SRCS += \
 
 OBJS += \
 ./BufferedReader.o \
+./ClientInterface.o \
 ./Client.o \
+./SSLClient.o \
 ./ConnectionPool.o \
 ./GodFather.o \
 ./IConnectionHandler.o \
@@ -23,7 +27,9 @@ OBJS += \
 
 CPP_DEPS += \
 ./BufferedReader.d \
+./ClientInterface.d \
 ./Client.d \
+./SSLClient.d \
 ./ConnectionPool.d \
 ./GodFather.d \
 ./IConnectionHandler.d \
@@ -38,5 +44,3 @@ CPP_DEPS += \
 	g++ -O0 -g3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)" -o"$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
-
-

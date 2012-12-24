@@ -141,12 +141,15 @@ Server::Server(string port,int waiting,Service serv)
 
 }
 
-Server::Server(string port,bool block,int waiting,Service serv,bool tobefork)
+Server::Server(string port,bool block,int waiting,Service serv,int mode)
 {
 	struct addrinfo hints, *servinfo, *p;
 	struct sigaction sa;
 	int yes=1;
 	int rv;
+
+	if(mode<1 || mode >3)
+		mode = 3;
 
 	memset(&hints, 0, sizeof hints);
 	hints.ai_family = AF_UNSPEC;
@@ -200,26 +203,28 @@ Server::Server(string port,bool block,int waiting,Service serv,bool tobefork)
 		exit(1);
 	}
 	cout << "waiting for connections on " << port << ".....\n" << flush;
-	if(tobefork)
+	if(mode==1)
 	{
 		if(fork()==0)
 		{
-			servicing(serv);
+			servicing(this, serv);
 		}
 	}
-	else
-		servicing(serv);
+	else if(mode==2)
+		boost::thread m_thread(boost::bind(&Server::servicing, this, serv));
+	else if(mode==3)
+		servicing(this, serv);
 }
 
 Server::~Server() {
 	// TODO Auto-generated destructor stub
 }
 
-void Server::servicing(Service serv)
+void Server::servicing(Server *server, Service serv)
 {
 	while(1)
 	{
-		int new_fd = this->Accept();
+		int new_fd = server->Accept();
 		if (new_fd == -1)
 		{
 			perror("accept");

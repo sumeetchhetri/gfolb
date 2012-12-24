@@ -50,9 +50,9 @@ typedef void (*Service)(int);
 class Server {
 	int sock;
 	struct sockaddr_storage their_addr;
-	void servicing(Service);
+	static void servicing(Server*, Service);
 public:
-	Server(string,bool,int,Service,bool);
+	Server(string,bool,int,Service,int);
 	Server(string port,int waiting,Service serv);
 	virtual ~Server();
 	int Accept();

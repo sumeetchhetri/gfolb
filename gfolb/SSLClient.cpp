@@ -1,4 +1,19 @@
 /*
+	Copyright 2010, Sumeet Chhetri
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+*/
+/*
  * SSLClient.cpp
  *
  *  Created on: Dec 14, 2010
@@ -18,14 +33,7 @@ SSLClient::~SSLClient() {
 static char *pass;
 static BIO *bio_err=0;
 // get sockaddr, IPv4 or IPv6:
-void *SSLClient::get_in_addr1(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET) {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
 
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
 static void sigpipe_handle(int x){
 }
 
@@ -119,56 +127,46 @@ void SSLClient::error_occurred(char *error)
 
 bool SSLClient::connection(string host,int port)
 {
-    struct addrinfo hints, *servinfo, *p;
-    int rv;
-    char s[INET6_ADDRSTRLEN];
+	struct sockaddr_in *remote;
+	//int sock;
+	int tmpres;
+	char *ip;
+	//char *get;
 
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    string sport = boost::lexical_cast<string>(port);
-    if ((rv = getaddrinfo(host.c_str(), sport.c_str(), &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return false;
-    }
+	sockfd = create_tcp_socket();
+	ip = get_ip((char*)host.c_str());
+	fprintf(stderr, "IP is %s\n", ip);
+	remote = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in *));
+	remote->sin_family = AF_INET;
+	tmpres = inet_pton(AF_INET, ip, (void *)(&(remote->sin_addr.s_addr)));
+	if( tmpres < 0)
+	{
+		perror("Can't set remote->sin_addr.s_addr");
+		//exit(1);
+	}
+	else if(tmpres == 0)
+	{
+		fprintf(stderr, "%s is not a valid IP address\n", ip);
+		//exit(1);
+	}
+	remote->sin_port = htons(port);
 
-    // loop through all the results and connect to the first we can
-    for(p = servinfo; p != NULL; p = p->ai_next) {
-        if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                p->ai_protocol)) == -1) {
-            perror("SSLClient: socket");
-            continue;
-        }
+	if(connect(sockfd, (struct sockaddr *)remote, sizeof(struct sockaddr)) < 0){
+		perror("Could not connect");
+		connected = false;
+	} else {
+		connected = true;
+	}
 
-        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            close(sockfd);
-            perror("SSLClient: connect");
-            continue;
-        }
-
-        break;
-    }
-
-    if (p == NULL) {
-    	connected = false;
-        fprintf(stderr, "SSLClient: failed to connect\n");
-        return false;
-    }
-
-    inet_ntop(p->ai_family, get_in_addr1((struct sockaddr *)p->ai_addr),
-            s, sizeof s);
-    cout << "SSLClient connecting to " << host << ":" << port << endl;
-
-    freeaddrinfo(servinfo); // all done with this structure
-
-
+	free(remote);
+	free(ip);
 
     /* Build our SSL context*/
-    ctx=initialize_ctx(KEYFILE,PASSWORD);
+    ctx=initialize_ctx((char*)KEYFILE,(char*)PASSWORD);
 
     /* Connect the SSL socket */
 	ssl=SSL_new(ctx);
-	sbio=BIO_new_socket(sockfd,BIO_CLOSE);
+	sbio=BIO_new_socket(sockfd,BIO_NOCLOSE);
 	SSL_set_bio(ssl,sbio,sbio);
 	io=BIO_new(BIO_f_buffer());
 	ssl_bio=BIO_new(BIO_f_ssl());
@@ -177,7 +175,7 @@ bool SSLClient::connection(string host,int port)
 
 	if(SSL_connect(ssl)<=0)
 	{
-		error_occurred("SSL connect error");
+		error_occurred((char*)"SSL connect error");
 		closeSSL();
 	}
 	ERR_clear_error();
@@ -190,16 +188,21 @@ bool SSLClient::connection(string host,int port)
 int SSLClient::sendData(string data)
 {
 	ERR_clear_error();
-	int bytes = SSL_write(ssl,data.c_str(),data.length());
-	switch(SSL_get_error(ssl,bytes)){
-	  case SSL_ERROR_NONE:
-		if(data.length()!=bytes)
-			error_occurred("Incomplete write!");
-		break;
-		default:
-			error_occurred("SSL write problem");
+	int sent = 0;
+	while(data.length()>0)
+	{
+		int bytes = SSL_write(ssl, data.c_str(), data.length());
+		switch(SSL_get_error(ssl,bytes)){
+			case SSL_ERROR_NONE:
+				break;
+			default:
+				error_occurred((char*)"SSL write problem");
+				return 0;
+		}
+		//cout << "sent data " << bytes << " " << data.length() << endl;
+		data = data.substr(bytes);
 	}
-	return bytes;
+	return 1;
 }
 
 string SSLClient::getData(string hdrdelm,string cntlnhdr)
@@ -218,15 +221,15 @@ string SSLClient::getData(string hdrdelm,string cntlnhdr)
 				break;
 			case SSL_ERROR_ZERO_RETURN:
 			{
-				error_occurred("SSL error problem");
-				if(io!=NULL)BIO_free_all(io);
-				return "";
+				error_occurred((char*)"SSL - Connection closed\n");
+				//if(io!=NULL)BIO_free_all(io);
+				return alldat;
 			}
 			default:
 			{
-				error_occurred("SSL read problem");
-				if(io!=NULL)BIO_free_all(io);
-				return "";
+				error_occurred((char*)"SSL read problem");
+				//if(io!=NULL)BIO_free_all(io);
+				return alldat;
 			}
 		}
 		if(!strcmp(buf,hdrdelm.c_str()))
@@ -264,15 +267,15 @@ string SSLClient::getData(string hdrdelm,string cntlnhdr)
 				break;
 			case SSL_ERROR_ZERO_RETURN:
 			{
-				error_occurred("SSL error problem");
-				if(io!=NULL)BIO_free_all(io);
-				return "";
+				error_occurred((char*)"SSL - Connection closed\n");
+				//if(io!=NULL)BIO_free_all(io);
+				return alldat;
 			}
 			default:
 			{
-				error_occurred("SSL read problem");
-				if(io!=NULL)BIO_free_all(io);
-				return "";
+				error_occurred((char*)"SSL read problem");
+				//if(io!=NULL)BIO_free_all(io);
+				return alldat;
 			}
 		}
 		alldat += (buf);
@@ -298,15 +301,63 @@ string SSLClient::getData(int cntlen)
 				break;
 			case SSL_ERROR_ZERO_RETURN:
 			{
-				error_occurred("SSL error problem");
-				if(io!=NULL)BIO_free_all(io);
-				return "";
+				error_occurred((char*)"SSL - Connection closed\n");
+				//if(io!=NULL)BIO_free_all(io);
+				return alldat;
 			}
 			default:
 			{
-				error_occurred("SSL read problem");
-				if(io!=NULL)BIO_free_all(io);
-				return "";
+				error_occurred((char*)"SSL read problem\n");
+				//if(io!=NULL)BIO_free_all(io);
+				return alldat;
+			}
+		}
+		alldat += (buf);
+		//cout << buf << endl;
+		memset(&buf[0], 0, sizeof(buf));
+	}
+	return alldat;
+}
+
+string SSLClient::getBinaryData(int len, bool isLengthIncluded)
+{
+	cout << len << endl;
+	string alldat = getData(len);
+
+	int leng = getLengthCl(alldat, len);
+	if(isLengthIncluded)
+	{
+		leng -= len;
+	}
+	cout << "done reading header length " << leng << endl;
+	alldat = getData(leng);
+	cout << alldat.length() << endl;
+	return alldat;
+}
+
+string SSLClient::getTextData()
+{
+	string alldat;
+	char buf[MAXBUFLE];
+	int er;
+	while(true)
+	{
+		er = BIO_read(io,buf,MAXBUFLE);
+		switch(SSL_get_error(ssl,er))
+		{
+			case SSL_ERROR_NONE:
+				break;
+			case SSL_ERROR_ZERO_RETURN:
+			{
+				error_occurred((char*)"SSL - Connection closed\n");
+				//if(io!=NULL)BIO_free_all(io);
+				return alldat;
+			}
+			default:
+			{
+				error_occurred((char*)"SSL read problem\n");
+				//if(io!=NULL)BIO_free_all(io);
+				return alldat;
 			}
 		}
 		alldat += (buf);
@@ -325,11 +376,5 @@ void SSLClient::closeConnection()
 
 bool SSLClient::isConnected()
 {
-	int numbytes;
-	char buf[1];
-	if ((numbytes = recv(sockfd, buf, 1, MSG_PEEK)) == 0)
-	{
-		return false;
-	}
 	return connected;
 }

@@ -37,7 +37,7 @@ void ConnectionPool::cleanUP()
 	instance->cpmutex.lock();
 	for (int var = 0; var < (int)instance->conns.size(); ++var)
 	{
-		instance->conns.at(var).client.closeConnection();
+		instance->conns.at(var).client->closeConnection();
 	}
 	instance->cpmutex.unlock();
 }
@@ -55,46 +55,46 @@ void ConnectionPool::keepspawiningConnections()
 				set<int> backwhch;
 				for (int var1 = 0; var1 < instance->siz; ++var1)
 				{
-					for (int var = var1*instance->tem;var < var1*instance->tem + instance->tem,instance->conns.size()>var; ++var)
+					for (int var = var1*instance->tem;var < (int)(var1*instance->tem + instance->tem); ++var)
 					{
 						if(instance->conns.at(var).destroyed)
 						{
 							cout << "respawned destroyed connection" << flush;
 
 							instance->cpmutex.lock();
-							instance->conns.at(var).client.closeConnection();
+							instance->conns.at(var).client->closeConnection();
 							instance->cpmutex.unlock();
 
-							Connection conn;
-							Client client;
-							bool flag = client.connection(instance->ip.at(var1),instance->port.at(var1));
+							Connection conn(instance->cssl.at(var1));
+							//Client client;
+							bool flag = conn.client->connection(instance->ip.at(var1),instance->port.at(var1));
 							if(!flag)
 							{
 								backlog.push_back(var);
 							}
 							else
 							{
-								conn.client = client;
-								conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?boost::lexical_cast<string>(instance->port.at(var1)):"");
+								//conn.client = client;
+								conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?":"+boost::lexical_cast<string>(instance->port.at(var1)):"");
 
 								instance->cpmutex.lock();
 								instance->conns[var] = conn;
 								instance->cpmutex.unlock();
 							}
 						}
-						else if(!instance->conns.at(var).client.isConnected())
+						else if(!instance->conns.at(var).client->isConnected())
 						{
-							Connection conn;
-							Client client;
-							bool flag = client.connection(instance->ip.at(var1),instance->port.at(var1));
+							Connection conn(instance->cssl.at(var));
+							//Client client;
+							bool flag = conn.client->connection(instance->ip.at(var1),instance->port.at(var1));
 							if(!flag)
 							{
 								backlog.push_back(var);
 							}
 							else
 							{
-								conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?boost::lexical_cast<string>(instance->port.at(var1)):"");
-								conn.client = client;
+								conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?":"+boost::lexical_cast<string>(instance->port.at(var1)):"");
+								//conn.client = client;
 
 								instance->cpmutex.lock();
 								instance->conns[var] = conn;
@@ -103,7 +103,7 @@ void ConnectionPool::keepspawiningConnections()
 						}
 						else
 						{
-							backwhch.insert(var1);
+							backwhch.insert(var);
 						}
 					}
 				}
@@ -117,13 +117,13 @@ void ConnectionPool::keepspawiningConnections()
 					{
 						for (int var2 = cnt*backeach; var2 < cnt*backeach+backeach; ++var2)
 						{
-							Connection conn;
-							Client client;
-							bool flag = client.connection(instance->ip.at(*it),instance->port.at(*it));
+							Connection conn(instance->cssl.at(*it));
+							//Client client;
+							bool flag = conn.client->connection(instance->ip.at(*it),instance->port.at(*it));
 							if(flag)
 							{
-								conn.host = instance->ip.at(*it) + (instance->port.at(*it)!=80?boost::lexical_cast<string>(instance->port.at(*it)):"");
-								conn.client = client;
+								conn.host = instance->ip.at(*it) + (instance->port.at(*it)!=80?":"+boost::lexical_cast<string>(instance->port.at(*it)):"");
+								//conn.client = client;
 
 								instance->cpmutex.lock();
 								instance->conns[var2] = conn;
@@ -137,13 +137,13 @@ void ConnectionPool::keepspawiningConnections()
 					{
 						while(backeachrem>0)
 						{
-							Connection conn;
-							Client client;
-							bool flag = client.connection(instance->ip.at(*it),instance->port.at(*it));
+							Connection conn(instance->cssl.at(*it));
+							//Client client;
+							bool flag = conn.client->connection(instance->ip.at(*it),instance->port.at(*it));
 							if(flag)
 							{
-								conn.client = client;
-								conn.host = instance->ip.at(*it) + (instance->port.at(*it)!=80?boost::lexical_cast<string>(instance->port.at(*it)):"");
+								//conn.client = client;
+								conn.host = instance->ip.at(*it) + (instance->port.at(*it)!=80?":"+boost::lexical_cast<string>(instance->port.at(*it)):"");
 
 								instance->cpmutex.lock();
 								instance->conns[cnt*backeach+backeachrem] = conn;
@@ -165,11 +165,11 @@ void ConnectionPool::keepspawiningConnections()
 				}
 				for (int var = 0; var < instance->num; ++var)
 				{
-					if(!instance->conns.at(var).client.isConnected())
+					if(!instance->conns.at(var).client->isConnected())
 					{
-						Connection conn;
-						Client client;
-						bool flag = client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+						Connection conn(instance->cssl.at(instance->fonum));
+						//Client client;
+						bool flag = conn.client->connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
 						if(!flag)
 						{
 							cout << "Failover Secondary link failed..." << endl;
@@ -178,7 +178,7 @@ void ConnectionPool::keepspawiningConnections()
 							instance->fonum = 0;
 							instance->cpmutex.unlock();
 
-							secfld = client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+							secfld = conn.client->connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
 							if(secfld)
 							{
 								cout << "Both links down will quit now..." << endl;
@@ -188,8 +188,8 @@ void ConnectionPool::keepspawiningConnections()
 							else
 								break;
 						}
-						conn.host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
-						conn.client = client;
+						conn.host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?":"+boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
+						//conn.client = client;
 
 						instance->cpmutex.lock();
 						instance->conns[var] = conn;
@@ -218,10 +218,21 @@ void ConnectionPool::createPool(int num,vector<string> ipprts,bool persistent,st
 		for (int var = 0; var < (int)ipprts.size(); ++var)
 		{
 			string whl = ipprts.at(var);
-			instance->ip.push_back(whl.substr(0,whl.find(":")));
+			vector<string> ipdetails;
+			boost::iter_split(ipdetails, whl, boost::first_finder(":"));
+			if(ipdetails.size()!=3)
+			{
+				cout << "Invalid endpoint configured...." << endl;
+				continue;
+			}
+			bool ssl = false;
+			if(ipdetails.at(0)=="ssl" || ipdetails.at(0)=="SSL")
+				ssl = true;
+			instance->cssl.push_back(ssl);
+			instance->ip.push_back(ipdetails.at(1));
 			try
 			{
-				int por = boost::lexical_cast<int>(whl.substr(whl.find(":")+1));
+				int por = boost::lexical_cast<int>(ipdetails.at(2));
 				instance->port.push_back(por);
 			}
 			catch(...)
@@ -244,15 +255,15 @@ void ConnectionPool::createPool(int num,vector<string> ipprts,bool persistent,st
 			{
 				for (int var = 0; var < instance->tem; ++var)
 				{
-					Connection conn;
-					Client client;
-					client.connection(instance->ip.at(var1),instance->port.at(var1));
-					if(!client.isConnected())
+					Connection conn(instance->cssl.at(var1));
+					//Client client;
+					conn.client->connection(instance->ip.at(var1),instance->port.at(var1));
+					if(!conn.client->isConnected())
 						break;
-					conn.client = client;
+					//conn.client = client;
 					conn.destroyed = false;
 					conn.busy = false;
-					conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?boost::lexical_cast<string>(instance->port.at(var1)):"");
+					conn.host = instance->ip.at(var1) + (instance->port.at(var1)!=80?":"+boost::lexical_cast<string>(instance->port.at(var1)):"");
 					instance->conns.push_back(conn);
 				}
 			}
@@ -278,7 +289,7 @@ Connection* ConnectionPool::getConnection()
 	Connection* conn = NULL;
 	if(!instance->persi)
 	{
-		Connection* con = new Connection;
+		Connection* con = NULL;//new Connection(instance->cssl.at(var1));
 		int tries = 0;
 		string msg;
 		if(instance->mode=="LB")
@@ -289,35 +300,27 @@ Connection* ConnectionPool::getConnection()
 				instance->fonum = 0;
 				instance->cpmutex.unlock();
 			}
-			con->host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
-			con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
-			{
-				instance->cpmutex.lock();
-				instance->fonum++;
-				instance->cpmutex.unlock();
-			}
+			cout << instance->fonum << endl;
+			con = new Connection(instance->cssl.at(instance->fonum));
+			con->host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?":"+boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
+			con->client->connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+
+			instance->cpmutex.lock();
+			instance->fonum++;
+			instance->cpmutex.unlock();
+
 			msg = "no servers available";
 		}
 		else if(instance->mode=="FO")
 		{
-			con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
-
-			instance->cpmutex.lock();
-			if(instance->fonum==1)
-			{
-				instance->fonum = 0;
-			}
-			else
-			{
-				instance->fonum = 1;
-			}
-			instance->cpmutex.unlock();
-			con->host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
+			con = new Connection(instance->cssl.at(instance->fonum));
+			con->client->connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+			con->host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?":"+boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
 			msg = "no servers available to switch over to";
 		}
 		else if(instance->mode=="OR")
 		{
-			ifstream ifs("o_data");
+			/*ifstream ifs("o_data");
 			if(ifs.is_open())
 			{
 				string temp;
@@ -334,13 +337,22 @@ Connection* ConnectionPool::getConnection()
 				{
 				}
 				remove("o_data");
-			}
+			}*/
 			cout << instance->onlineroute << endl;
-			con->client.connection(instance->ip.at(instance->onlineroute),instance->port.at(instance->onlineroute));
+			if(instance->onlineroute>=instance->siz)
+			{
+				instance->cpmutex.lock();
+				instance->onlineroute = 0;
+				instance->cpmutex.unlock();
+			}
+			con = new Connection(instance->cssl.at(instance->onlineroute));
+			con->client->connection(instance->ip.at(instance->onlineroute),instance->port.at(instance->onlineroute));
+			con->host = instance->ip.at(instance->onlineroute) + (instance->port.at(instance->onlineroute)!=80?":"+boost::lexical_cast<string>(instance->port.at(instance->onlineroute)):"");
 			return con;
 		}
-		while(!con->client.isConnected())
+		while(con!=NULL && !con->client->isConnected())
 		{
+			delete con;
 			if(instance->mode=="FO")
 			{
 				instance->cpmutex.lock();
@@ -359,7 +371,9 @@ Connection* ConnectionPool::getConnection()
 					exit(0);
 				}
 			}
-			con->client.connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+			con = new Connection(instance->cssl.at(instance->fonum));
+			con->client->connection(instance->ip.at(instance->fonum),instance->port.at(instance->fonum));
+			con->host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?":"+boost::lexical_cast<string>(instance->port.at(instance->fonum)):"");
 			if(instance->mode=="LB")
 			{
 				instance->cpmutex.lock();
@@ -382,7 +396,7 @@ Connection* ConnectionPool::getConnection()
 			for (int var = 0; var < (int)instance->conns.size(); ++var)
 			{
 				if(!instance->conns[var].busy && !instance->conns[var].destroyed
-						&& instance->conns[var].client.isConnected())
+						&& instance->conns[var].client->isConnected())
 				{
 					instance->cpmutex.lock();
 					instance->conns[var].busy = true;
@@ -391,7 +405,7 @@ Connection* ConnectionPool::getConnection()
 					//cout << "returned not null conn" << endl;
 					break;
 				}
-				else if(!instance->conns[var].client.isConnected())
+				else if(!instance->conns[var].client->isConnected())
 				{
 					instance->cpmutex.lock();
 					instance->conns[var].destroyed = true;
@@ -406,18 +420,128 @@ Connection* ConnectionPool::getConnection()
 
 string ConnectionPool::validate(vector<string> cmd)
 {
-	try
+	if(cmd.at(1)=="CR")
 	{
-		cout << instance << endl;
-		int nwrt = boost::lexical_cast<int>(cmd.at(2));
-		ofstream ofs("o_data");
-		ofs.write(cmd.at(2).c_str(),cmd.at(2).length());
-		ofs.close();
-		cout << "changed route " << nwrt << endl;
+		try
+		{
+			int nwrt = boost::lexical_cast<int>(cmd.at(2));
+			if(instance->siz==1)
+			{
+				string t =  "INVALID ROUTE - ONLY A SINGLE ROUTE EXISTS";			
+				return t;
+			}
+			if(instance->siz==0)
+			{
+				string t =  "NO ROUTE EXISTS";	
+				return t;
+			}
+			if(nwrt>instance->siz-1)
+			{
+				string t =  "INVALID ROUTE - SELECT ROUTE FROM 0-" + boost::lexical_cast<string>(instance->siz-1);			
+				return t;
+			}
+			/*ofstream ofs("o_data");
+			ofs.write(cmd.at(2).c_str(),cmd.at(2).length());
+			ofs.close();*/
+			instance->cpmutex.lock();
+			instance->onlineroute = nwrt;
+			instance->cpmutex.unlock();
+			cout << "changed route " << nwrt << endl;
+		}
+		catch(...)
+		{
+			return "INVALID ARGUMENT";
+		}
 	}
-	catch(...)
+	else
 	{
-		return "INVALID ARGUMENT";
+		string address = cmd.at(2);
+		string ip;
+		int por = 80;
+		bool ssl = false;
+		if(cmd.at(1)!="DR")
+		{
+			vector<string> ipdetails;
+			boost::iter_split(ipdetails, address, boost::first_finder(":"));
+			if(ipdetails.size()!=3)
+			{
+				cout << "invalid endpoint details" << endl;
+				return "INVALID ENDPOINT DETAILS";
+			}
+			if(ipdetails.at(0)=="ssl" || ipdetails.at(0)=="SSL")
+				ssl = true;
+			ip = ipdetails.at(1);
+			try
+			{
+				por = boost::lexical_cast<int>(ipdetails.at(2));
+			}
+			catch(...)
+			{
+				cout << "invalid port specified" << endl;
+				return "INVALID PORT SPECIFIED";
+			}
+			char *rip = ClientInterface::get_ip((char*)ip.c_str());
+			if(rip==NULL)
+			{
+				cout << "invalid host specified" << endl;
+				return "INVALID HOST SPECIFIED";
+			}
+			ip = "";
+			ip.append(rip);
+		}
+		if(cmd.at(1)=="AR")
+		{
+			instance->cpmutex.lock();
+			instance->ip.push_back(ip);
+			instance->port.push_back(por);
+			instance->cssl.push_back(ssl);
+			instance->siz = instance->ip.size();
+			instance->cpmutex.unlock();
+		}
+		else if(cmd.at(1)=="UR" || cmd.at(1)=="DR")
+		{
+			int ind = 2;
+			if(cmd.at(1)=="UR")
+			{
+				if(cmd.size()!=4)
+				{
+					cout << "4 arguments expected" << endl;
+					return "ARGUMENT MISSING - EXPECTED 4";
+				}
+				ind = 3;
+			}
+			
+			int index = -1;
+			try
+			{
+				index = boost::lexical_cast<int>(cmd.at(ind));
+			}
+			catch(...)
+			{
+				cout << "invalid update index specified" << endl;
+				return "INVALID UPDATE INDEX SPECIFIED";
+			}
+			if(index>instance->siz-1)
+			{
+				cout << "update index out of range" << endl;
+				return "UPDATE INDEX OUT OF RANGE";
+			}
+			instance->cpmutex.lock();
+			if(cmd.at(1)=="UR")
+			{
+				instance->ip.at(index) = ip;
+				instance->port.at(index) = por;
+				instance->cssl.at(index) = ssl;
+			}
+			else
+			{
+				instance->ip.erase(instance->ip.begin()+index);
+				instance->port.erase(instance->port.begin()+index);
+				instance->cssl.erase(instance->cssl.begin()+index);
+				instance->siz = instance->ip.size();
+			}
+			instance->cpmutex.unlock();
+		}
 	}
 	return "COMMAND SUCCESSFULL";
 }
@@ -440,10 +564,20 @@ bool ConnectionPool::isPersistent()
 	return instance->persi;
 }
 
-Connection::Connection()
-{}
+Connection::Connection(bool isSSL)
+{
+	if(isSSL)
+	{
+		client = new SSLClient();
+	}
+	else
+	{
+		client = new Client();
+	}
+}
 
 Connection::~Connection()
 {
-	client.closeConnection();
+	client->closeConnection();
+	delete client;
 }

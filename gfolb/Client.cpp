@@ -30,48 +30,6 @@ Client::~Client() {
 	// TODO Auto-generated destructor stub
 }
 
-
-// get sockaddr, IPv4 or IPv6:
-void *get_in_addr1(struct sockaddr *sa)
-{
-	if (sa->sa_family == AF_INET) {
-		return &(((struct sockaddr_in*)sa)->sin_addr);
-	}
-
-	return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
-
-int create_tcp_socket()
-{
-	int sock;
-	if((sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0){
-		perror("Can't create TCP socket");
-		exit(1);
-	}
-	return sock;
-}
-
-
-char *get_ip(char *host)
-{
-	struct hostent *hent;
-	int iplen = 15; //XXX.XXX.XXX.XXX
-	char *ip = (char *)malloc(iplen+1);
-	memset(ip, 0, iplen+1);
-	if((hent = gethostbyname(host)) == NULL)
-	{
-		perror("Can't get IP");
-		exit(1);
-	}
-	if(inet_ntop(AF_INET, (void *)hent->h_addr_list[0], ip, iplen) == NULL)
-	{
-		perror("Can't resolve host");
-		exit(1);
-	}
-	return ip;
-}
-
-
 bool Client::connection(string host,int port)
 {
 	struct sockaddr_in *remote;
@@ -100,7 +58,9 @@ bool Client::connection(string host,int port)
 
 	if(connect(sockfd, (struct sockaddr *)remote, sizeof(struct sockaddr)) < 0){
 		perror("Could not connect");
-		//exit(1);
+		connected = false;
+	} else {
+		connected = true;
 	}
 	//if(!blk)fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK);
 	/*get = build_get_query(host, page);
@@ -115,8 +75,8 @@ bool Client::connection(string host,int port)
 	free(ip);
 	//close(sock);
 	//return 0;
-	connected = true;
-	return true;
+	
+	return connected;
 }
 
 void Client::setSocketBlocking()
@@ -137,7 +97,7 @@ int Client::sendData(string data)
 	{
 		int tmpres = send(sockfd, data.c_str(), data.length(), 0);
 		if(tmpres == -1){
-			perror("Can't send query");
+			perror("Can't send data");
 		}
 		data = data.substr(tmpres);
 	}
@@ -192,16 +152,6 @@ int Client::sendlen(string buf,int len)
 	return send(sockfd, buf.c_str(), len, 0);
 }
 
-int getLengthCl(string header,int size)
-{
-	int totsize = header[size-1] & 0xff;
-	for (int var = 0; var < size-1; var++)
-	{
-		totsize |= ((header[var] & 0xff) << (size-1-var)*8);
-	}
-	return totsize;
-}
-
 string Client::getBinaryData(int len, bool isLengthIncluded)
 {
 	cout << len << endl;
@@ -245,5 +195,5 @@ bool Client::isConnected()
 	{
 		return false;
 	}*/
-	return true;
+	return connected;
 }
