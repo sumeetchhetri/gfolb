@@ -79,8 +79,8 @@ void IConnectionHandler::service(int fd, string data, IConnectionHandler* handle
 	}
 
 	Connection *conn = ConnectionPool::getConnection();
-	Client client = conn->client;
-	if (!client.isConnected()) {
+	//Client client = conn->client;
+	if (!conn->client->isConnected()) {
 
 		handler->reader->p_mutex.lock();
 		handler->reader->fds[fd] = true;
@@ -98,16 +98,16 @@ void IConnectionHandler::service(int fd, string data, IConnectionHandler* handle
 		boost::replace_first(data, "{REPLACE_HOST_f2079930-4a8b-11e2-bcfd-0800200c9a66}", conn->host);
 	}
 	//boost::replace_first(data, "HTTP/1.1", "HTTP/1.0");
-	int bytes = client.sendData(data);
+	int bytes = conn->client->sendData(data);
 	cout << "===================Request START===================" << endl;
 	cout << data << endl;
 	cout << "====================Request END====================" << endl;
 
 	string call, tot;
 	if(!handler->reader->isTextData())
-		tot = client.getBinaryData(handler->reader->getHeaderLength(), handler->reader->isHeaderLengthIncluded());
+		tot = conn->client->getBinaryData(handler->reader->getHeaderLength(), handler->reader->isHeaderLengthIncluded());
 	else
-		tot = client.getTextData();
+		tot = conn->client->getTextData();
 	//tot += client.getData();
 	cout << "===================Response START===================" << endl;
 	cout << tot << endl;
@@ -143,7 +143,7 @@ void IConnectionHandler::service(int fd, string data, IConnectionHandler* handle
  }*/
 
 IConnectionHandler::IConnectionHandler(vector<string> ipps, bool persistent,
-		int poolsize, propMap props) {
+		int poolsize, propMap props, bool isSSL) {
 	if (props["GFOLB_MODE"] == "LB" || props["GFOLB_MODE"] == "FO"
 			|| props["GFOLB_MODE"] == "CH" || props["GFOLB_MODE"] == "OR") {
 		this->mode = props["GFOLB_MODE"];

@@ -124,7 +124,9 @@ void service(int fd)
 	boost::replace_all(data,"\r","");
 	boost::replace_all(data,"\n","");
 	boost::iter_split(command, data, boost::first_finder(" "));
-	if(command.size()<3 || command.at(0)!="OR" || command.at(1)!="CR")
+	if(command.size()<3 || command.at(0)!="OR" || 
+		(command.at(1)!="CR" && command.at(1)!="AR" && command.at(1)!="DR"
+			&& command.at(1)!="UR"))
 	{
 		send(fd,"Invalid command",15,0);
 	}
@@ -196,7 +198,10 @@ int main(int argc, char* argv[])
 		conn_pool = 10;
 	}
 	string mod_mode = props["GFOLB_MMODE"];//Default or Name of module (http,smpp,sip...)
+	bool isServerSSL = false;
 	string ssl_enb = props["SSL_ENAB"];//is SSL enabled
+	if(ssl_enb=="true" || ssl_enb=="TRUE")
+		isServerSSL = true;
 	string port_no = props["GFOLB_PORT"];//GFOLB listening port number
 	string admin_port_no = props["GFOLB_ADMIN_PORT"];//GFOLB listening port number
 	strVec ipprts;
@@ -264,10 +269,10 @@ int main(int argc, char* argv[])
     ofstream ofs("serv.ctrl");
     ofs << "Proces" << flush;
     ofs.close();
-    IConnectionHandler *handler = new IConnectionHandler(ipprts,con_pers,conn_pool,props);//new IConnectionHandler("localhost",8080,false,10);
+    IConnectionHandler *handler = new IConnectionHandler(ipprts,con_pers,conn_pool,props,isServerSSL);//new IConnectionHandler("localhost",8080,false,10);
     cout << "listening on port "<< port_no << endl;
 
-    Server server(admin_port_no,false,500,&service,true);
+    Server server(admin_port_no,false,500,&service,2);
 
     ifstream ifs("serv.ctrl");
     int curfds = 1;

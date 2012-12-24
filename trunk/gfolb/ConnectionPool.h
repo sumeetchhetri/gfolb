@@ -23,21 +23,23 @@
 #ifndef CONNECTIONPOOL_H_
 #define CONNECTIONPOOL_H_
 #include "Client.h"
+#include "SSLClient.h"
 #include "vector"
 #include "set"
 #include <boost/thread/thread.hpp>
 #include "fstream"
+#include "boost/algorithm/string.hpp"
 using namespace std;
 class Connection
 {
-	Connection();
+	Connection(bool);
 	bool busy;
 	friend class ConnectionPool;
 public:
 	virtual ~Connection();
 	string host;
 	bool destroyed;
-	Client client;
+	ClientInterface* client;
 	void free()
 	{
 		busy = false;
@@ -52,6 +54,7 @@ class ConnectionPool {
 	static ConnectionPool* instance;
 	vector<string> ip;
 	vector<int> port;
+	vector<bool> cssl;
 	string mode;
 	int siz;
 	int num,tem;

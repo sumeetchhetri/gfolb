@@ -22,26 +22,10 @@
 
 #ifndef CLIENT_H_
 #define CLIENT_H_
-#include "iostream"
-#include "sstream"
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <netdb.h>
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include "string"
-#include "boost/lexical_cast.hpp"
-#include "cstring"
-#include <boost/thread/thread.hpp>
+#include "ClientInterface.h"
 using namespace std;
 #define MAXDATASIZE 2048
-class Client {
+class Client : public ClientInterface {
 	bool connected;
 	int sockfd;
 public:

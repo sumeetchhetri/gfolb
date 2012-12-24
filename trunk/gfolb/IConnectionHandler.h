@@ -40,7 +40,7 @@ class IConnectionHandler {
 public:
 	BufferedReader *reader;
 	//IConnectionHandler(string ip,int port,bool persistent,int poolsize);
-	IConnectionHandler(vector<string> ipps,bool persistent,int poolsize,propMap props);
+	IConnectionHandler(vector<string> ipps,bool persistent,int poolsize,propMap props,bool isSSL);
 	virtual ~IConnectionHandler();
 	void add(int);
 	bool bind(int);
