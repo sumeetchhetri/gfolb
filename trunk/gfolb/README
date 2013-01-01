@@ -1,0 +1,13 @@
+A generic implementation of a Load Balancer and Fail over mechanism
+
+Feature
+=======
+1 Multi protocol support
+2 Any Text based(HTTP) or Binary protocol(SMPP) server can be supported
+3 Supports 3 modes of operation
+4 Fail Over (If one goes down transfer load to the other)
+5 Load Balancer (distribute equal load among the pool of servers)
+6 Online Routing (using the admin port fire online routing commands)
+7 Good performance (Code is written in C++)
+8 SSL support present
+9 Persistent or Non-persistent connections to the pool supported
