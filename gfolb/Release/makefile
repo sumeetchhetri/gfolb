@@ -7,9 +7,10 @@
 RM := rm -rf
 
 # All of the sources participating in the build are defined here
--include ../sources.mk
+-include envvars.mk
+-include sources.mk
 -include objects.mk
--include ../subdir.mk
+-include subdir.mk
 
 ifneq ($(MAKECMDGOALS),clean)
 ifneq ($(strip $(C++_DEPS)),)
@@ -34,31 +35,29 @@ endif
 
 -include ../makefile.defs
 
-EXT_LIBS := 
-
 # Add inputs and outputs from these tool invocations to the build variables 
 
 pre-build:
-	chmod 755 ../chkIncludes.sh
-	sh ../chkIncludes.sh
+	chmod 755 chkIncludes.sh
+	sh chkIncludes.sh
 
 # All Target
 all: pre-build gfolb
 
 # Tool invocations
-gfolb: $(OBJS) $(USER_OBJS)
-	rm -rf ../gfolb
-	mkdir ../gfolb
-	cp -f ../../resources/*.* ../gfolb
+gfolb: pre-build $(OBJS) $(USER_OBJS)
+	rm -rf gfolb
+	mkdir gfolb
+	cp -f ../resources/*.* gfolb
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C++ Linker'
-	g++  -o"../gfolb/gfolb" $(OBJS) $(USER_OBJS) $(LIBS)
+	g++ $(PTHREADS) -o"gfolb/gfolb" $(OBJS) $(USER_OBJS) $(LIBS) $(EX_LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
 # Other Targets
 clean:
-	-$(RM) $(OBJS)$(C++_DEPS)$(C_DEPS)$(CC_DEPS)$(CPP_DEPS)$(EXECUTABLES)$(CXX_DEPS)$(C_UPPER_DEPS) gfolb
+	-$(RM) $(OBJS) $(C++_DEPS) $(C_DEPS) $(CC_DEPS) $(CPP_DEPS) $(EXECUTABLES) $(CXX_DEPS) $(C_UPPER_DEPS) gfolb
 	-@echo ' '
 
 .PHONY: all clean dependents

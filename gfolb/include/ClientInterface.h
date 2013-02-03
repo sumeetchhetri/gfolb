@@ -50,6 +50,7 @@ class ClientInterface
 public:
 	virtual bool connection(string,int)=0;
 	virtual void closeConnection()=0;
+	virtual bool connectionUnresolv(string host,int port)=0;
 	virtual bool isConnected()=0;
 	virtual int sendData(string)=0;
 	virtual string getBinaryData(int,bool)=0;

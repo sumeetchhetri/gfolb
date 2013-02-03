@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include "AppDefines.h"
 #include "Logger.h"
+#include "cstring"
 #include <fcntl.h>
 #include <sys/time.h>
 #define MAXDESCRIPTORS 1024
@@ -49,10 +50,17 @@ class SelEpolKqEvPrt {
 		struct kevent evlist[MAXDESCRIPTORS];
 	    struct kevent change;
 	#endif
+	#ifdef USE_DEVPOLL
+	    int dev_poll_fd;
+	    struct pollfd polled_fds[MAXDESCRIPTORS];
+	#endif
 	#ifdef USE_EVPORT
-	    bool reassociateListener;
 	    int port;
 	    port_event_t evlist[MAXDESCRIPTORS];
+	#endif
+	#ifdef USE_POLL
+	    nfds_t nfds;
+	    struct pollfd *polled_fds;
 	#endif
 public:
 	SelEpolKqEvPrt();
@@ -63,6 +71,7 @@ public:
 	bool isListeningDescriptor(int descriptor);
 	bool registerForEvent(int descriptor);
 	bool unRegisterForEvent(int descriptor);
+	void reRegisterServerSock();
 };
 
 #endif /* SELEPOLKQEVPRT_H_ */

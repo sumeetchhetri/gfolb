@@ -23,25 +23,23 @@
 
 ThreadPool::ThreadPool()
 {
+	this->runFlag = false;
+	joinComplete = false;
 	logger = Logger::getLogger("ThreadPool");
 }
+
 void ThreadPool::init(int initThreads, int maxThreads,bool console)
 {
+	if(wpool!=NULL)return;
 	this->console = console;
 	this->lowp = -1;
 	this->highp = -1;
 	this->initThreads = initThreads;
 	this->maxThreads = maxThreads;
-	wpool = new TaskPool;
-	wpool->console = console;
-	tpool = new vector<PoolThread*> ;
-	for (int i = 0; i < initThreads; i++) {
-		PoolThread *thread = new PoolThread();
-		thread->console = console;
-		thread->execute();
-		tpool->push_back(thread);
-	}
-	poller = new Thread(&ThreadPool::poll, this);
+	joinComplete = false;
+	prioritypooling = false;
+	initializeThreads();
+	start();
 }
 
 ThreadPool::ThreadPool(int initThreads, int maxThreads, int lowp, int highp) {
@@ -53,17 +51,10 @@ ThreadPool::ThreadPool(int initThreads, int maxThreads, int lowp, int highp) {
 	this->maxThreads = maxThreads;
 	this->lowp = lowp;
 	this->highp = highp;
-	tpool = new vector<PoolThread*> ;
-	wpool = new TaskPool;
-	wpool->console = console;
-	for (int i = 0; i < initThreads; i++) {
-		PoolThread *thread = new PoolThread();
-		thread->console = console;
-		thread->execute();
-		tpool->push_back(thread);
-	}
-	poller = new Thread(&ThreadPool::poll, this);
+	this->runFlag = false;
+	joinComplete = false;
 	prioritypooling = true;
+	initializeThreads();
 }
 ThreadPool::ThreadPool(int initThreads, int maxThreads, int lowp, int highp,bool console) {
 	this->console = console;
@@ -74,17 +65,10 @@ ThreadPool::ThreadPool(int initThreads, int maxThreads, int lowp, int highp,bool
 	this->maxThreads = maxThreads;
 	this->lowp = lowp;
 	this->highp = highp;
-	tpool = new vector<PoolThread*> ;
-	wpool = new TaskPool;
-	wpool->console = console;
-	for (int i = 0; i < initThreads; i++) {
-		PoolThread *thread = new PoolThread();
-		thread->console = console;
-		thread->execute();
-		tpool->push_back(thread);
-	}
-	poller = new Thread(&ThreadPool::poll, this);
+	this->runFlag = false;
+	joinComplete = false;
 	prioritypooling = true;
+	initializeThreads();
 }
 
 ThreadPool::ThreadPool(int initThreads, int maxThreads) {
@@ -94,16 +78,10 @@ ThreadPool::ThreadPool(int initThreads, int maxThreads) {
 	this->console = false;
 	this->initThreads = initThreads;
 	this->maxThreads = maxThreads;
-	wpool = new TaskPool;
-	wpool->console = console;
-	tpool = new vector<PoolThread*> ;
-	for (int i = 0; i < initThreads; i++) {
-		PoolThread *thread = new PoolThread();
-		thread->console = console;
-		thread->execute();
-		tpool->push_back(thread);
-	}
-	poller = new Thread(&ThreadPool::poll, this);
+	this->runFlag = false;
+	joinComplete = false;
+	prioritypooling = false;
+	initializeThreads();
 }
 
 ThreadPool::ThreadPool(int initThreads, int maxThreads,bool console) {
@@ -113,59 +91,84 @@ ThreadPool::ThreadPool(int initThreads, int maxThreads,bool console) {
 	this->highp = -1;
 	this->initThreads = initThreads;
 	this->maxThreads = maxThreads;
+	this->runFlag = false;
+	joinComplete = false;
+	prioritypooling = false;
+	initializeThreads();
+}
+
+void ThreadPool::initializeThreads()
+{
+	if(runFlag)return;
 	wpool = new TaskPool;
 	wpool->console = console;
-	tpool = new vector<PoolThread*> ;
+	tpool = new vector<PoolThread*>;
 	for (int i = 0; i < initThreads; i++) {
-		PoolThread *thread = new PoolThread();
-		thread->console = console;
+		PoolThread *thread = new PoolThread(console);
 		thread->execute();
 		tpool->push_back(thread);
 	}
+	runFlag = true;
 	poller = new Thread(&ThreadPool::poll, this);
+	wpool->start();
+	pollerStarted = false;
+	complete = false;
+	m_mutex = new Mutex;
+}
+
+void ThreadPool::start()
+{
+	if(pollerStarted)return;
+	poller->execute();
+	pollerStarted = true;
 }
 
 void* ThreadPool::poll(void *arg) {
 	ThreadPool* ths = (ThreadPool*)arg;
-	while (true) {
-		if (!ths->prioritypooling) {
-			if (ths->wpool->tasksPending()) {
-				Task *task = ths->wpool->getTask();
-				PoolThread *idleThread = ths->getIdleThread();
-				idleThread->task = task;
-				idleThread->idle = false;
-				cout << "got task" << endl;
-				idleThread->mthread->interrupt();
-			} else {
-				Thread::mSleep(1);
+	ths->m_mutex->lock();
+	bool fl = ths->runFlag;
+	ths->m_mutex->unlock();
+	while (fl) {
+		if (!ths->prioritypooling && ths->wpool->tasksPending()) {
+			Task *task = ths->wpool->getTask();
+			if(task!=NULL)
+			{
+				ths->submit(task);
 			}
-		} else {
-			if (ths->wpool->tasksPPending()) {
-				Task *task = ths->wpool->getPTask();
-				PoolThread *idleThread = ths->getIdleThread();
-				idleThread->task = task;
-				idleThread->idle = false;
-				idleThread->mthread->interrupt();
-			} else {
-				Thread::mSleep(1);
+		} else if (ths->prioritypooling && ths->wpool->tasksPPending()) {
+			Task *task = ths->wpool->getPTask();
+			if(task!=NULL)
+			{
+				ths->submit(task);
 			}
 		}
+		Thread::mSleep(1);
+		ths->m_mutex->lock();
+		fl = ths->runFlag;
+		ths->m_mutex->unlock();
 	}
+	ths->m_mutex->lock();
+	ths->complete = true;
+	ths->m_mutex->unlock();
 	return NULL;
 }
-PoolThread* ThreadPool::getIdleThread() {
-	while (true) {
+
+void ThreadPool::submit(Task *task) {
+	bool flag = true;
+	while (flag) {
 		for (unsigned int var = 0; var < tpool->size(); var++) {
-			if (tpool->at(var)->idle) {
-				return tpool->at(var);
+			if (tpool->at(var)->isIdle()) {
+				tpool->at(var)->checkout(task);
+				flag = false;
+				break;
 			}
 		}
 		Thread::mSleep(1);
 	}
-	return NULL;
 }
+
 void ThreadPool::joinAll() {
-	while (true) {
+	while (!joinComplete) {
 		if (!prioritypooling) {
 			while (wpool->tasksPending()) {
 				Thread::sSleep(1);
@@ -177,11 +180,12 @@ void ThreadPool::joinAll() {
 		}
 		int i = 0;
 		for (unsigned int var = 0; var < tpool->size(); var++) {
-			if (tpool->at(var)->idle) {
+			if (tpool->at(var)->isIdle()) {
 				i++;
 			}
 		}
 		if (i == initThreads) {
+			joinComplete = true;
 			break;
 		} else {
 			Thread::sSleep(1);
@@ -192,7 +196,7 @@ void ThreadPool::execute(Task &task, int priority) {
 
 	if(console)
 	{
-		logger << "Added task to wpool\n" << flush;
+		logger << "Adding task to wpool\n" << flush;
 	}
 	task.tunit = -1;
 	task.type = -1;
@@ -208,7 +212,7 @@ void ThreadPool::execute(Task &task) {
 
 	if(console)
 	{
-		logger << "Added task to wpool\n" << flush;
+		logger << "Adding task to wpool\n" << flush;
 	}
 	task.tunit = -1;
 	task.type = -1;
@@ -220,7 +224,7 @@ void ThreadPool::execute(Task &task) {
 		wpool->addPTask(task);
 	}
 }
-void ThreadPool::schedule(Task &task, int tunit, int type) {
+void ThreadPool::schedule(Task &task, long long tunit, int type) {
 
 	if(console)
 	{
@@ -238,16 +242,32 @@ void ThreadPool::schedule(Task &task, int tunit, int type) {
 }
 
 ThreadPool::~ThreadPool() {
+	while(!joinComplete) {
+		joinAll();
+		Thread::mSleep(1);
+	}
+	this->m_mutex->lock();
+	this->runFlag = false;
+	this->m_mutex->unlock();
+
+	m_mutex->lock();
+	bool fl = this->complete;
+	m_mutex->unlock();
+	while(!fl)
+	{
+		m_mutex->lock();
+		fl = this->complete;
+		m_mutex->unlock();
+		Thread::mSleep(1);
+	}
 	delete poller;
-	delete tpool;
 	delete wpool;
+	for (int i = 0; i <(int)tpool->size(); i++) {
+		delete tpool->at(i);
+	}
+	delete m_mutex;
 	if(console)
 	{
 		logger << "Destroyed PoolThread Pool\n" << flush;
 	}
 }
-
-void ThreadPool::start() {
-	if(!started)poller->execute();
-}
-

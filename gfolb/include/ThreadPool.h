@@ -38,20 +38,23 @@ class ThreadPool {
 	Thread *poller;
 	bool prioritypooling;
 	static void* poll(void *arg);
-	PoolThread* getIdleThread();
-	bool started;
+	void submit(Task *task);
+	bool runFlag, complete, pollerStarted;
+	void initializeThreads();
+	Mutex *m_mutex;
+	bool joinComplete;
 public:
 	ThreadPool(int,int,int,int,bool);
 	ThreadPool(int,int,int,int);
 	ThreadPool(int,int,bool);
 	ThreadPool(int,int);
 	ThreadPool();
+	void start();
 	void init(int,int,bool);
 	void joinAll();
 	void execute(Task &task, int priority);
 	void execute(Task &task) ;
-	void schedule(Task &task, int tunit, int type);
+	void schedule(Task &task, long long tunit, int type);
 	virtual ~ThreadPool();
-	void start();
 };
 #endif /* THREADPOOL_H_ */

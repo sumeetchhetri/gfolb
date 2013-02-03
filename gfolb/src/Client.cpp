@@ -66,6 +66,55 @@ bool Client::connection(string host,int port)
 	return connected;
 }
 
+
+bool Client::connectionUnresolv(string host,int port)
+{
+    struct addrinfo hints, *servinfo, *p;
+    int rv;
+    char s[INET6_ADDRSTRLEN];
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    string sport = CastUtil::lexical_cast<string>(port);
+    if ((rv = getaddrinfo(host.c_str(), sport.c_str(), &hints, &servinfo)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return false;
+    }
+
+    // loop through all the results and connect to the first we can
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            perror("client: socket");
+            continue;
+        }
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            perror("client: connect");
+            connected = false;
+            continue;
+        } else {
+        	connected = true;
+        }
+        break;
+    }
+
+    if (p == NULL) {
+        fprintf(stderr, "client: failed to connect\n");
+        return false;
+    }
+
+    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
+            s, sizeof s);
+    //printf("client: connecting to %s\n", s);
+
+    freeaddrinfo(servinfo); // all done with this structure
+
+    return connected;
+}
+
 void Client::setSocketBlocking()
 {
 	fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFD, 0) | O_NONBLOCK);
@@ -106,7 +155,7 @@ string Client::getTextData(string hdrdelm,string cntlnhdr)
 		if(er==0)
 		{
 			if(io!=NULL)BIO_free_all(io);
-			logger << "\nsocket closed before being serviced" <<flush;
+			//logger << "\nsocket closed before being serviced" <<flush;
 			return alldat;
 		}
 		if(!strcmp(buf,hdrdelm.c_str()))
@@ -135,12 +184,15 @@ string Client::getTextData(string hdrdelm,string cntlnhdr)
 	}
 	while(cntlen>0)
 	{
-		logger << "reading conetnt " << cntlen;
-		er = BIO_read(io,buf,cntlen);
+		//logger << "reading conetnt " << cntlen;
+		int toRead = cntlen;
+		if(cntlen>MAXBUFLE)
+			toRead = MAXBUFLE - 1;
+		er = BIO_read(io,buf,toRead);
 		if(er==0)
 		{
 			if(io!=NULL)BIO_free_all(io);
-			logger << "\nsocket closed before being serviced" <<flush;
+			//logger << "\nsocket closed before being serviced" <<flush;
 			return alldat;
 		}
 		string temp(buf, er);
@@ -178,7 +230,7 @@ int Client::sendlen(string buf,int len)
 
 string Client::getBinaryData(int len, bool isLengthIncluded)
 {
-	logger << len;
+	//logger << len;
 	string alldat;
 	char *buf1 = new char[len+1];
 	memset(buf1, 0, len);
@@ -193,7 +245,7 @@ string Client::getBinaryData(int len, bool isLengthIncluded)
 	{
 		leng -= len;
 	}
-	logger << "done reading header length " << leng;
+	//logger << "done reading header length " << leng;
 	char *buf = new char[leng+1];
 	memset(buf, 0, sizeof(buf));
 	recv(sockfd, buf, leng, 0);
@@ -201,7 +253,7 @@ string Client::getBinaryData(int len, bool isLengthIncluded)
 		alldat.push_back(buf[var]);
 	}
 	memset(buf, 0, sizeof(buf));
-	logger << alldat.length();
+	//logger << alldat.length();
 	return alldat;
 }
 
@@ -214,4 +266,26 @@ void Client::closeConnection()
 bool Client::isConnected()
 {
 	return connected && ClientInterface::isConnected(sockfd);
+}
+
+string Client::getData()
+{
+	int numbytes;
+	char buf[MAXBUFLE];
+	while ((numbytes = recv(sockfd, buf, MAXBUFLE-1, 0)) == -1)
+	{
+		//perror("recv");
+		if(errno!=EAGAIN)
+			return "";
+		//exit(1);
+	}
+	if(numbytes==0)
+	{
+		connected = false;
+		close(sockfd);
+		return "";
+	}
+	string data(buf,buf+numbytes);
+	memset(&buf[0], 0, sizeof(buf));
+	return data;
 }

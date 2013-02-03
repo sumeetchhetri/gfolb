@@ -35,4 +35,70 @@ Task::Task(int tunit, int type) :
 	this->type = type;
 }
 Task::~Task()
-{}
+{
+}
+
+bool Task::isWaitOver(Timer *timer)
+{
+	bool flag = false;
+	if (type == TimeUnit::NANOSECONDS)
+	{
+		long long diff = timer->elapsedNanoSeconds();
+		if(tunit <= diff)
+		{
+			flag = true;
+		}
+	}
+	else if (type == TimeUnit::MICROSECONDS)
+	{
+		long long diff = timer->elapsedMicroSeconds();
+		if(tunit <= diff)
+		{
+			flag = true;
+		}
+	}
+	else if (type == TimeUnit::MILLISECONDS)
+	{
+		long long diff = timer->elapsedMilliSeconds();
+		if(tunit <= diff)
+		{
+			flag = true;
+		}
+	}
+	else if (type == TimeUnit::SECONDS)
+	{
+		long long diff = timer->elapsedSeconds();
+		if(tunit <= diff)
+		{
+			flag = true;
+		}
+	}
+	else if (type == TimeUnit::MINUTES)
+	{
+		long long diff = timer->elapsedSeconds() / 60;
+		diff = diff/60;
+		if(tunit <= diff)
+		{
+			flag = true;
+		}
+	}
+	else if (type == TimeUnit::HOURS)
+	{
+		long long diff = timer->elapsedSeconds();
+		diff = diff/3600;
+		if(tunit <= diff)
+		{
+			flag = true;
+		}
+	}
+	else if(type==TimeUnit::DAYS)
+	{
+		long long diff = timer->elapsedSeconds();
+		diff = diff/86400;
+		if(tunit <= diff)
+		{
+			flag = true;
+		}
+	}
+	return flag;
+}

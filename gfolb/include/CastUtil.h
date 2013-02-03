@@ -26,6 +26,7 @@
 #include <stdlib.h>
 #include "StringUtil.h"
 #include <cxxabi.h>
+#include "cstring"
 using namespace std;
 
 class CastUtil {
@@ -226,16 +227,17 @@ public:
 		else if(tn=="bool")
 		{
 			bool d = false;
-			if(StringUtil::toLowerCopy(val)=="true")
+			if(StringUtil::toLowerCopy(val)=="true" || StringUtil::toLowerCopy(val)=="1")
 				d = true;
-			else if(StringUtil::toLowerCopy(val)=="false")
+			else if(StringUtil::toLowerCopy(val)=="false" || StringUtil::toLowerCopy(val)=="0")
 				d = false;
 			else
 				throw "Conversion exception";
 			t = d;
 		}
-		else if(tn=="std::string")
+		else if(tn=="std::string" || tn=="string")
 		{
+			if(strlen(val)==0)return t;
 			stringstream ss;
 			ss << val;
 			ss >> t;

@@ -27,15 +27,24 @@
 #include "list"
 #include "Task.h"
 #include "Mutex.h"
+#include "Thread.h"
+#include "TimeUnit.h"
+#include "Timer.h"
 
 class TaskPool {
 	std::queue<Task*> *tasks;
 	list<Task*> *ptasks;
+	vector<Task*> *scheduledtasks;
+	vector<Timer*> *scheduledTimers;
 	Mutex *m_mutex;
 	bool console;
+	Thread *mthread;
+	static void* run(void *arg);
 	friend class ThreadPool;
+	bool runFlag, complete, thrdStarted;
 public:
 	TaskPool();
+	void start();
 	void addTask(Task &task);
 	void addTask(Task *task);
 	void addPTask(Task &task);
@@ -46,6 +55,5 @@ public:
 	bool tasksPPending();
 	~TaskPool();
 };
-
 
 #endif /* TASKPOOL_H_ */
