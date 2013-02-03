@@ -23,7 +23,8 @@
 #ifndef TASK_H_
 #define TASK_H_
 #include "string"
-#include "iostream"
+#include "Timer.h"
+#include "TimeUnit.h"
 using namespace std;
 
 class Task {
@@ -36,6 +37,7 @@ class Task {
 	friend class PoolThread;
 	friend class ThreadPool;
 	friend class TaskPool;
+	bool isWaitOver(Timer *timer);
 public:
 	Task();
 	virtual ~Task();

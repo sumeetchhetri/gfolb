@@ -24,20 +24,28 @@
 #define POOLTHREAD_H_
 #include "Task.h"
 #include "Thread.h"
+#include "Mutex.h"
 #include "TimeUnit.h"
 #include "Logger.h"
 
 class PoolThread {
 	bool console;
 	static void* run(void *arg);
+	PoolThread(bool console);
 	PoolThread();
 	virtual ~PoolThread();
 	Thread *mthread;
 	bool idle;
 	Task *task;
 	Logger logger;
+	Mutex *m_mutex;
+	void release();
 	friend class ThreadPool;
+	Task* getTask();
+	bool runFlag, complete, thrdStarted;
 public:
+	bool isIdle();
+	void checkout(Task *task);
 	void execute();
 };
 

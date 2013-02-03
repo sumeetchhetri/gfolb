@@ -45,6 +45,7 @@ public:
 	SSLClient();
 	virtual ~SSLClient();
 	bool connection(string,int);
+	bool connectionUnresolv(string host,int port);
 	int sendData(string);
 	string getData(string hdrdelm,string cntlnhdr);
 	string getData(int cntlen);

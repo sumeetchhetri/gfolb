@@ -46,15 +46,14 @@ propMap PropFileReader::getProperties(string filepath)
 	  {
 		  if(line!="")
 		  {
-			  vemp = StringUtil::split(line, ("="));
-		  	  if(vemp.size()==2)
+		  	  if(line.find("=")!=string::npos)
 		  	  {
-		  		  string temp = vemp.at(1);
-		  		  StringUtil::replaceAll(temp,"\n","");
-		  		  StringUtil::replaceAll(temp,"\r","");
-		  		  if(all[vemp.at(0)]!="")
-		  			temp += ("," + all[vemp.at(0)]);
-		  		  all[vemp.at(0)] = temp;
+		  		  StringUtil::trim(line);
+		  		  if(line.find("=")!=line.length()-1)
+		  		  {
+		  			  //cout << line.substr(0, line.find("=")) << " = " << line.substr(line.find("=")+1) << endl;
+		  			  all[line.substr(0, line.find("="))] = line.substr(line.find("=")+1);
+		  		  }
 		  	  }
 		  }
 	  }

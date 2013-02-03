@@ -27,12 +27,21 @@
 #include <unistd.h>
 typedef void* (*ThreadFunc)(void*);
 
-class Thread {
+class Thread;
+
+class ThreadFunctor
+{
+	friend class Thread;
 	ThreadFunc f;
 	void* arg;
+};
+
+class Thread {
+	ThreadFunctor* threadFunctor;
 	pthread_t pthread;
 	pthread_cond_t cond;
 	pthread_mutex_t mut;
+	static void* _service(void* arg);
 public:
 	Thread(ThreadFunc f, void* arg);
 	virtual ~Thread();

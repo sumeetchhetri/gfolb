@@ -32,43 +32,46 @@ SelEpolKqEvPrt::~SelEpolKqEvPrt() {
 void SelEpolKqEvPrt::initialize(int sockfd)
 {
 	this->sockfd = sockfd;
+	curfds = 1;
 	#ifdef USE_SELECT
 		fdmax = sockfd;        // maximum file descriptor number
 
 		FD_ZERO(&master);    // clear the master and temp sets
 		FD_ZERO(&read_fds);
-
-		FD_SET(this->sockfd, &master);
 	#endif
 	#ifdef USE_EPOLL
-		curfds = 1;
 		epoll_handle = epoll_create(MAXDESCRIPTORS);
-		ev.events = EPOLLIN | EPOLLPRI;
-		ev.data.fd = this->sockfd;
-
-		if (epoll_ctl(epoll_handle, EPOLL_CTL_ADD, sockfd, &ev) < 0)
-		{
-			perror("epoll set insertion error");
-			return;
-		}
 	#endif
 	#ifdef USE_KQUEUE
-		curfds = 1;
 		kq = kqueue();
 		if (kq == -1)
+		{
 			perror("kqueue");
-
-		EV_SET(&change, sockfd, EVFILT_READ, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, 0);
-		kevent(kq, &change, 1, NULL, 0, NULL);
+		}
+	#endif
+	#ifdef USE_DEVPOLL
+		if((dev_poll_fd = open("/dev/poll", O_RDWR)) <0)
+		{
+			perror("devpoll");
+		}
+		if (fcntl(dev_poll_fd, F_SETFD, FD_CLOEXEC) < 0)
+		{
+			perror("devpoll fcntl");
+		}
 	#endif
 	#ifdef USE_EVPORT
 		if ((port = port_create()) < 0) {
 			perror("port_create");
 		}
-		if (port_associate(port, PORT_SOURCE_FD, sockfd, POLLIN, NULL) < 0) {
-			perror("port_associate");
-		}
 	#endif
+	#ifdef USE_DEVPOLL
+		nfds=1;
+		polled_fds = (struct pollfd *)calloc(1, nfds*sizeof(struct pollfd));
+		polled_fds->fd = descriptor;
+		polled_fds->events = POLLIN | POLLPRI;
+		return;
+	#endif
+	registerForEvent(sockfd);
 }
 
 
@@ -91,12 +94,30 @@ int SelEpolKqEvPrt::getEvents()
 		numEvents = epoll_wait(epoll_handle, events, curfds,-1);
 	#endif
 	#ifdef USE_KQUEUE
-		numEvents = kevent(kq, NULL, 0, evlist, curfds, NULL);
+		numEvents = kevent(kq, NULL, 0, evlist, MAXDESCRIPTORS, NULL);
+	#endif
+	#ifdef USE_DEVPOLL
+		struct dvpoll pollit;
+		pollit.dp_timeout = -1;
+		pollit.dp_nfds = curfds;
+		pollit.dp_fds = polled_fds;
+		numEvents = ioctl(dev_poll_fd, DP_POLL, &pollit);
 	#endif
 	#ifdef USE_EVPORT
-		uint_t num = 1;
-		port_getn(port, evlist, (uint_t) MAXDESCRIPTORS, (uint_t *) &num, NULL);
-		numEvents = (int)num;
+		uint_t nevents, wevents = 0;
+		uint_t num = 0;
+		if (port_getn(port, evlist, 0, &wevents, NULL) < 0) return 0;
+		if (0 == wevents) wevents = 1;
+		nevents = wevents;
+		if (port_getn(port, evlist, (uint_t) MAXDESCRIPTORS, &nevents, NULL) < 0) return 0;
+		numEvents = (int)nevents;
+	#endif
+	#ifdef USE_POLL
+		numEvents = poll(polled_fds,nfds,-1);
+		if (numEvents == -1){
+			perror ("poll");
+			exit(0);
+		}
 	#endif
 	return numEvents;
 }
@@ -121,12 +142,17 @@ int SelEpolKqEvPrt::getDescriptor(int index)
 			return evlist[index].ident;
 		}
 	#endif
+	#ifdef USE_DEVPOLL
+		return polled_fds[index].fd;
+	#endif
 	#ifdef USE_EVPORT
-		if(evlist[index].portev_source == PORT_SOURCE_FD)
+		if(index>-1 && index<sizeof evlist)
 		{
-			reassociateListener = true;
 			return (int)evlist[index].portev_object;
 		}
+	#endif
+	#ifdef USE_POLL
+		return polled_fds[index].fd;
 	#endif
 	return -1;
 }
@@ -142,6 +168,7 @@ bool SelEpolKqEvPrt::isListeningDescriptor(int descriptor)
 
 bool SelEpolKqEvPrt::registerForEvent(int descriptor)
 {
+	curfds++;
 	fcntl(descriptor, F_SETFL, fcntl(descriptor, F_GETFD, 0) | O_NONBLOCK);
 	#ifdef USE_SELECT
 		FD_SET(descriptor, &master); // add to master set
@@ -150,7 +177,6 @@ bool SelEpolKqEvPrt::registerForEvent(int descriptor)
 		}
 	#endif
 	#ifdef USE_EPOLL
-		curfds++;
 		ev.events = EPOLLIN | EPOLLPRI;
 		ev.data.fd = descriptor;
 		if (epoll_ctl(epoll_handle, EPOLL_CTL_ADD, descriptor, &ev) < 0)
@@ -161,43 +187,77 @@ bool SelEpolKqEvPrt::registerForEvent(int descriptor)
 		}
 	#endif
 	#ifdef USE_KQUEUE
-		curfds++;
-		EV_SET(&change, descriptor, EVFILT_READ, EV_ADD | EV_ENABLE | EV_ONESHOT, 0, 0, 0);
+		memset(&change, 0, sizeof(change));
+		EV_SET(&change, descriptor, EVFILT_READ, EV_ADD, 0, 0, 0);
 		kevent(kq, &change, 1, NULL, 0, NULL);
+	#endif
+	#ifdef USE_DEVPOLL
+		struct pollfd poll_fd;
+		poll_fd.fd = descriptor;
+		poll_fd.events = POLLIN;
+		poll_fd.revents = 0;
+		if (write(dev_poll_fd, &poll_fd, sizeof(poll_fd)) < 0) {
+			perror("devpoll");
+			return false;
+		}
 	#endif
 	#ifdef USE_EVPORT
 		if (port_associate(port, PORT_SOURCE_FD, descriptor, POLLIN, NULL) < 0) {
 			perror("port_associate");
 		}
-		if(reassociateListener)
-		{
-			if (port_associate(port, PORT_SOURCE_FD, sockfd, POLLIN, NULL) < 0) {
-				perror("port_associate");
-			}
-			reassociateListener = false;
-		}
+	#endif
+	#ifdef USE_POLL
+		nfds++;
+		polled_fds = (struct pollfd *)realloc(polled_fds, (nfds+1)*sizeof(struct pollfd));
+		(polled_fds+nfds)->fd = descriptor;
+		(polled_fds+nfds)->events = POLLIN | POLLPRI;
 	#endif
 	return true;
 }
 
-bool SelEpolKqEvPrt::unRegisterForEvent(int descriptor)
+bool SelEpolKqEvPrt::unRegisterForEvent(int index)
 {
+	int descriptor = getDescriptor(index);
+	curfds--;
 	#ifdef USE_SELECT
 		FD_CLR(descriptor, &master);
 	#endif
 	#ifdef USE_EPOLL
-		curfds--;
 		epoll_ctl(epoll_handle, EPOLL_CTL_DEL, descriptor, &ev);
 	#endif
 	#ifdef USE_KQUEUE
-		curfds--;
+		memset(&change, 0, sizeof(change));
 		EV_SET(&change, descriptor, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		kevent(kq, &change, 1, NULL, 0, NULL);
 	#endif
-	#ifdef USE_EVPORT
-		if (port_dissociate(port, PORT_SOURCE_FD, descriptor) < 0) {
-			perror("port_dissociate");
+	#ifdef USE_DEVPOLL
+		struct pollfd poll_fd;
+		poll_fd.fd = descriptor;
+		poll_fd.events = POLLREMOVE;
+		poll_fd.revents = 0;
+		if (write(dev_poll_fd, &poll_fd, sizeof(poll_fd)) < 0) {
+			perror("devpoll");
+			return false;
 		}
 	#endif
+	#ifdef USE_EVPORT
+		/*if (port_dissociate(port, PORT_SOURCE_FD, descriptor) < 0) {
+			perror("port_dissociate");
+		}*/
+	#endif
+	#ifdef USE_POLL
+		nfds--;
+		memcpy(polled_fds+index,polled_fds+index+1,nfds-index);
+		polled_fds = (struct pollfd *)realloc(polled_fds, nfds*sizeof(struct pollfd));
+	#endif
 	return true;
+}
+
+void SelEpolKqEvPrt::reRegisterServerSock()
+{
+	#ifdef USE_EVPORT
+		if (port_associate(port, PORT_SOURCE_FD, sockfd, POLLIN, NULL) < 0) {
+			perror("port_associate");
+		}
+	#endif
 }

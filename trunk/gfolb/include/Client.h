@@ -32,6 +32,7 @@ public:
 	Client();
 	virtual ~Client();
 	bool connection(string,int);
+	bool connectionUnresolv(string host,int port);
 	int sendData(string);
 	string getTextData(string hdrdelm,string cntlnhdr);
 	string getBinaryData(int,bool);
@@ -41,7 +42,7 @@ public:
 	void setSocketNonBlocking();
 	int receive(string& buf,int flag);
 	int receivelen(string& buf,int len,int flag);
-
+	string getData();
 	int sendlen(string buf,int len);
 };
 

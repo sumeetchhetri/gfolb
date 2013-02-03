@@ -24,39 +24,17 @@
 
 void* PoolThread::run(void *arg)
 {
-	while (true)
+	PoolThread* ths = (PoolThread*)arg;
+	ths->m_mutex->lock();
+	bool console = ths->console;
+	bool fl = ths->runFlag;
+	ths->m_mutex->unlock();
+	while (fl)
 	{
-		PoolThread* ths = (PoolThread*)arg;
-		Thread* mthread = ths->mthread;
-		//cout << "started wait" << endl;
-		mthread->wait();
-		//cout << "end wait" << endl;
-		ths = (PoolThread*)arg;
-		Task* task = ths->task;
-		bool console = ths->console;
-		if (task != NULL)
+		ths->mthread->wait();
+		Task* task = ths->getTask();
+		if (task)
 		{
-			if (task->tunit != -1 && task->type != -1 && task->tunit > 0 && task->type > 0)
-			{
-				if(console)
-				{
-					ths->logger << "Task scheduled for sleep\n" << flush;
-				}
-				if (task->type == TimeUnit::NANOSECONDS)
-					Thread::nSleep(task->tunit);
-				else if (task->type == TimeUnit::MICROSECONDS)
-					Thread::uSleep(task->tunit);
-				else if (task->type == TimeUnit::MILLISECONDS)
-					Thread::mSleep(task->tunit);
-				else if (task->type == TimeUnit::SECONDS)
-					Thread::sSleep(task->tunit);
-				else if (task->type == TimeUnit::MINUTES)
-					Thread::nSleep(task->tunit * 60);
-				else if (task->type == TimeUnit::HOURS)
-					Thread::nSleep(task->tunit * 60 * 60);
-				else if(task->type==TimeUnit::DAYS)
-					Thread::nSleep(task->tunit * 24 * 60 * 60);
-			}
 			try
 			{
 				task->run();
@@ -68,24 +46,55 @@ void* PoolThread::run(void *arg)
 					ths->logger << e.what() << flush;
 				}
 			}
-			task->~Task();
-			ths->task = NULL;
+			ths->release();
 		}
-		ths->idle = true;
+		ths->m_mutex->lock();
+		fl = ths->runFlag;
+		ths->m_mutex->unlock();
 	}
+	ths->m_mutex->lock();
+	ths->complete = true;
+	ths->m_mutex->unlock();
 	return NULL;
+}
+
+PoolThread::PoolThread(bool console) {
+	logger = Logger::getLogger("PoolThread");
+	this->task = NULL;
+	this->idle = true;
+	this->console = console;
+	this->complete = false;
+	this->runFlag = true;
+	this->thrdStarted = false;
+	m_mutex = new Mutex;
+	mthread = new Thread(&run, this);
 }
 
 PoolThread::PoolThread() {
 	logger = Logger::getLogger("PoolThread");
-	task = NULL;
-	idle = true;
+	this->task = NULL;
+	this->idle = true;
+	this->console = false;
+	this->thrdStarted = false;
+	m_mutex = new Mutex;
 	mthread = new Thread(&run, this);
 }
 
 PoolThread::~PoolThread() {
+	this->runFlag = false;
+	m_mutex->lock();
+	bool fl = this->complete;
+	m_mutex->unlock();
+	while(!fl)
+	{
+		m_mutex->lock();
+		fl = this->complete;
+		m_mutex->unlock();
+		mthread->interrupt();
+		Thread::mSleep(1);
+	}
 	delete mthread;
-	delete task;
+	delete m_mutex;
 	if(console)
 	{
 		logger << "Destroyed PoolThread\n" << flush;
@@ -93,6 +102,43 @@ PoolThread::~PoolThread() {
 }
 
 void PoolThread::execute() {
+	if(thrdStarted)return;
+	m_mutex->lock();
 	mthread->execute();
+	thrdStarted = true;
+	m_mutex->unlock();
 }
 
+void PoolThread::checkout(Task *task)
+{
+	m_mutex->lock();
+	this->idle = false;
+	this->task = task;
+	if(thrdStarted)
+		this->mthread->interrupt();
+	m_mutex->unlock();
+}
+
+void PoolThread::release()
+{
+	m_mutex->lock();
+	this->task = NULL;
+	this->idle = true;
+	m_mutex->unlock();
+}
+
+bool PoolThread::isIdle()
+{
+	m_mutex->lock();
+	bool isIdle = idle;
+	m_mutex->unlock();
+	return isIdle;
+}
+
+Task* PoolThread::getTask()
+{
+	this->m_mutex->lock();
+	Task* task = this->task;
+	this->m_mutex->unlock();
+	return task;
+}

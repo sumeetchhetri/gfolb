@@ -3,7 +3,7 @@ A generic implementation of a Load Balancer and Fail over mechanism
 Feature
 =======
 1 Multi protocol support
-2 Any Text based(HTTP) or Binary protocol(SMPP) server can be supported
+2 Any Text based(HTTP/SIP/FTP) or Binary protocol(SMPP) server can be supported
 3 Supports 3 modes of operation
 4 Fail Over (If one goes down transfer load to the other)
 5 Load Balancer (distribute equal load among the pool of servers)

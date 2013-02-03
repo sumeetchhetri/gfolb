@@ -43,7 +43,7 @@ public:
 	template <typename T>
 	friend Logger& operator<< (Logger& logger, T msg)
 	{
-		logger.write(msg,"info");
+		logger.write(msg,"info",false);
 		return logger;
 	}
 	friend Logger& operator<< (Logger& logger, ostream& (*pf) (ostream&));
@@ -57,9 +57,9 @@ private:
 	static string* filepath;
 	static ofstream* out;
 	static Mutex* _theLogmutex;
-	void write(string,string);
+	void write(string msg,string mod,bool newline);
 	template <typename T>
-	void write(T tmsg, string mod)
+	void write(T tmsg, string mod,bool newline)
 	{
 		Date dat;
 		string te = datFormat->format(dat);
@@ -67,13 +67,21 @@ private:
 		if(*mode=="FILE")
 		{
 			_theLogmutex->lock();
-			*out << msg << tmsg << endl;
+			*out << msg << tmsg;
+			if(newline)
+				*out << endl;
+			else
+				*out << flush;
 			_theLogmutex->unlock();
 		}
 		else
 		{
 			_theLogmutex->lock();
-			cout << msg << tmsg << endl;
+			cout << msg << tmsg;
+			if(newline)
+				cout << endl;
+			else
+				cout << flush;
 			_theLogmutex->unlock();
 		}
 	}

@@ -167,6 +167,72 @@ bool SSLClient::connection(string host,int port)
     return true;
 }
 
+bool SSLClient::connectionUnresolv(string host,int port)
+{
+    struct addrinfo hints, *servinfo, *p;
+    int rv;
+    char s[INET6_ADDRSTRLEN];
+
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    string sport = CastUtil::lexical_cast<string>(port);
+    if ((rv = getaddrinfo(host.c_str(), sport.c_str(), &hints, &servinfo)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return false;
+    }
+
+    // loop through all the results and connect to the first we can
+    for(p = servinfo; p != NULL; p = p->ai_next) {
+        if ((sockfd = socket(p->ai_family, p->ai_socktype,
+                p->ai_protocol)) == -1) {
+            perror("client: socket");
+            continue;
+        }
+
+        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+            close(sockfd);
+            perror("client: connect");
+            connected = false;
+            continue;
+        } else {
+        	connected = true;
+        }
+        break;
+    }
+
+    if (p == NULL) {
+        fprintf(stderr, "client: failed to connect\n");
+        return false;
+    }
+
+    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr),
+            s, sizeof s);
+    //printf("client: connecting to %s\n", s);
+
+    freeaddrinfo(servinfo); // all done with this structure
+
+    /* Build our SSL context*/
+    ctx=initialize_ctx((char*)KEYFILE,(char*)PASSWORD);
+
+       /* Connect the SSL socket */
+   	ssl=SSL_new(ctx);
+   	sbio=BIO_new_socket(sockfd,BIO_CLOSE);
+   	SSL_set_bio(ssl,sbio,sbio);
+   	io=BIO_new(BIO_f_buffer());
+   	ssl_bio=BIO_new(BIO_f_ssl());
+   	BIO_set_ssl(ssl_bio,ssl,BIO_NOCLOSE);
+   	BIO_push(io,ssl_bio);
+
+   	if(SSL_connect(ssl)<=0)
+   	{
+   		logger << "SSL connect error";
+   		return false;
+   	}
+   	ERR_clear_error();
+    return connected;
+}
+
 int SSLClient::sendData(string data)
 {
 	ERR_clear_error();
@@ -183,6 +249,11 @@ int SSLClient::sendData(string data)
 		data = data.substr(bytes);
 	}
 	return 1;
+}
+
+string SSLClient::getData(string hdrdelm,string cntlnhdr)
+{
+	return getTextData(hdrdelm, cntlnhdr);
 }
 
 string SSLClient::getTextData(string hdrdelm,string cntlnhdr)
@@ -236,8 +307,11 @@ string SSLClient::getTextData(string hdrdelm,string cntlnhdr)
 	}
 	while(cntlen>0)
 	{
-		logger << "reading conetnt " << cntlen;
-		er = BIO_read(io,buf,cntlen);
+		//logger << "reading conetnt " << cntlen;
+		int toRead = cntlen;
+		if(cntlen>MAXBUFLE)
+			toRead = MAXBUFLE - 1;
+		er = BIO_read(io,buf,toRead);
 		switch(SSL_get_error(ssl,er))
 		{
 			case SSL_ERROR_NONE:
@@ -268,7 +342,7 @@ string SSLClient::getData(int cntlen)
 	int er;
 	while(cntlen>0)
 	{
-		logger << "reading content " << cntlen;
+		//logger << "reading content " << cntlen;
 		er = BIO_read(io,buf,cntlen);
 		switch(SSL_get_error(ssl,er))
 		{
@@ -294,7 +368,7 @@ string SSLClient::getData(int cntlen)
 
 string SSLClient::getBinaryData(int len, bool isLengthIncluded)
 {
-	logger << len;
+	//logger << len;
 	string alldat = getData(len);
 
 	int leng = getLengthCl(alldat, len);
@@ -302,7 +376,7 @@ string SSLClient::getBinaryData(int len, bool isLengthIncluded)
 	{
 		leng -= len;
 	}
-	logger << "done reading header length " << leng;
+	//logger << "done reading header length " << leng;
 	alldat = getData(leng);
 	logger << alldat.length();
 	return alldat;

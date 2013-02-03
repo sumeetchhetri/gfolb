@@ -64,13 +64,13 @@ void Logger::init(string file)
 		{
 			level = new string(LEVEL_ERROR);
 			mode = new string("CONSOLE");
-			datFormat = new DateFormat("dd/mm/yyyy hh:mi:ss");cout << mode << endl;
+			datFormat = new DateFormat("dd/mm/yyyy hh:mi:ss");
 			return;
 		}
 		level = new string(props["LEVEL"]);
 		mode = new string(props["MODE"]);
 		filepath = new string(props["FILEPATH"]);
-		datFormat = new DateFormat(props["DATEFMT"]);cout << mode << endl;
+		datFormat = new DateFormat(props["DATEFMT"]);
 		if(*mode=="FILE")
 		{
 			out = new ofstream();
@@ -110,11 +110,11 @@ Logger::~Logger()
 
 }
 
-void Logger::write(string msg,string mod)
+void Logger::write(string msg,string mod,bool newline)
 {
 	Date dat;
 	string te = datFormat->format(dat);
-	msg = "[" + te + "] ("+this->className + ") <"+mod+"> :"+msg+"\n";
+	msg = "[" + te + "] ("+this->className + ") <"+mod+"> :"+msg+(newline?"\n":"");
 	if(*mode=="FILE")
 	{
 		_theLogmutex->lock();
@@ -150,7 +150,7 @@ void Logger::info(string msg)
 {
 	if(*level!=LEVEL_DEBUG)
 	{
-		write(msg,"info");
+		write(msg,"info",true);
 	}
 }
 
@@ -158,13 +158,13 @@ void Logger::debug(string msg)
 {
 	if(*level==LEVEL_DEBUG)
 	{
-		write(msg,"debug");
+		write(msg,"debug",true);
 	}
 }
 
 void Logger::error(string msg)
 {
-	write(msg,"error");
+	write(msg,"error",true);
 }
 
 Logger& operator<< (Logger& logger, ostream& (*pf) (ostream&))

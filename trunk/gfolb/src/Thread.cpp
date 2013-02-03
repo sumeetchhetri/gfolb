@@ -21,16 +21,28 @@
  */
 
 #include "Thread.h"
+using namespace std;
+
+void* Thread::_service(void* arg)
+{
+	ThreadFunctor* threadFunctor = (ThreadFunctor*)arg;
+	void* ret = threadFunctor->f(threadFunctor->arg);
+	pthread_exit(NULL);
+	return ret;
+}
 
 Thread::Thread(ThreadFunc f, void* arg) {
-	this->f = f;
-	this->arg = arg;
+	this->threadFunctor = new ThreadFunctor();
+	this->threadFunctor->f = f;
+	this->threadFunctor->arg = arg;
 	pthread_mutex_init(&mut, NULL);
 	pthread_cond_init(&cond, NULL);
 }
 
 Thread::~Thread() {
-	// TODO Auto-generated destructor stub
+	//pthread_join(pthread, NULL);
+	pthread_mutex_destroy(&mut);
+	pthread_cond_destroy(&cond);
 }
 
 void Thread::join() {
@@ -70,7 +82,7 @@ void Thread::wait() {
 }
 
 void Thread::execute() {
-	if(pthread_create(&pthread, NULL, f, arg)) {
+	if(pthread_create(&pthread, NULL, _service, this->threadFunctor)) {
 		throw "Error Creating pthread";
 	}
 }
