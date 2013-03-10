@@ -118,18 +118,19 @@ void* IConnectionHandler::service(void* arg) {
 	}
 
 	int bytes = conn->client->sendData(data);
-	handler->logger << "Request START";
+	/*handler->logger << "Request START";
 	handler->logger << data;
-	handler->logger << "Request END";
+	handler->logger << "Request END";*/
 
 	string call, tot;
 	if(!handler->reader->isTextData())
 		tot = conn->client->getBinaryData(handler->reader->getHeaderLength(), handler->reader->isHeaderLengthIncluded());
 	else
 		tot = conn->client->getTextData(handler->reader->getHeaderDelimiter(), handler->reader->getContentLnegthHeader());
-	handler->logger << "Response START";
+
+	/*handler->logger << "Response START";
 	handler->logger << tot;
-	handler->logger << "Response END";
+	handler->logger << "Response END";*/
 
 	int toto = tot.length();
 
@@ -139,7 +140,7 @@ void* IConnectionHandler::service(void* arg) {
 		{
 			SSLConnection sslConn = handler->reader->sslConns->find(fd)->second;
 			int r;
-			if((r=BIO_puts(sslConn.io, tot.c_str()))<=0)
+			if((r=BIO_write(sslConn.io, tot.c_str(), tot.length()))<=0)
 			{
 				handler->logger << "send failed";
 			}
@@ -243,4 +244,16 @@ bool IConnectionHandler::bind(int fd) {
 
 bool IConnectionHandler::unbind(int fd) {
 	return true;
+}
+
+void RequestProp::run()
+{
+	string ind = handler->reader->singleRequest(fd);
+	if(ind.length()>0)
+	{
+		handler->reader->p_mutex.lock();
+		handler->reader->q[fd].push(ind);
+		handler->reader->fds[fd]=false;
+		handler->reader->p_mutex.unlock();
+	}
 }

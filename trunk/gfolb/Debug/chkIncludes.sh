@@ -1,12 +1,18 @@
 #!/bin/sh
 
 APP_DEFINE_FILE=../include/AppDefines.h
+CONSTANTS_FILE=../src/Constants.cpp
 FLAG=0
 
 IS_OS_CYGWIN=`uname|tr '[A-Z]' '[a-z]'|awk 'index($0,"cygwin") != 0 {print "cygwin"}'`
 IS_OS_BSD=`uname|tr '[A-Z]' '[a-z]'|awk 'index($0,"bsd") != 0 {print "bsd"}'`
 IS_OS_SOLARIS=`uname|tr '[A-Z]' '[a-z]'|awk 'index($0,"sunos") != 0 {print "sunos"}'`
 IS_OS_LINUX=`uname|tr '[A-Z]' '[a-z]'|awk 'index($0,"linux") != 0 {print "linux"}'`
+
+IS_64_BIT=`uname -m|tr '[A-Z]' '[a-z]'|awk '($0 == "x86_64" || $0 == "ia64" || $0 == "amd64" || index($0,"64") != 0) {print "#define IS_64_BIT 1"}'`
+if [ "$IS_OS_SOLARIS" != "" ]; then
+	IS_64_BIT=`/usr/bin/isainfo -k|tr '[A-Z]' '[a-z]'|awk '($0 == "x86_64" || $0 == "ia64" || $0 == "amd64" || index($0,"64") != 0) {print "#define IS_64_BIT 1"}'`
+fi
 
 echo '#include <sys/epoll.h>' > .test.h
 echo '' > $APP_DEFINE_FILE
@@ -93,4 +99,46 @@ if [ "$FLAG" = "0" ]; then
 	  echo '# undef USE_SELECT' >> $APP_DEFINE_FILE
 	  echo '#endif' >> $APP_DEFINE_FILE
 	fi
+fi
+
+if [ "$IS_OS_LINUX" != "" ]; then
+cat <<EOM> $CONSTANTS_FILE
+#include "Constants.h"
+
+bool Constants::SYS_FORK_AVAIL = true;
+bool Constants::SCRIPT_EXEC_SHOW_ERRS = true;
+bool Constants::IS_FILE_DESC_PASSING_AVAIL = true;
+EOM
+echo '#define OS_LINUX 1' >> $APP_DEFINE_FILE
+echo $IS_64_BIT >> $APP_DEFINE_FILE
+elif [ "$IS_OS_BSD" != "" ]; then
+cat <<EOM> $CONSTANTS_FILE
+#include "Constants.h"
+
+bool Constants::SYS_FORK_AVAIL = true;
+bool Constants::SCRIPT_EXEC_SHOW_ERRS = false;
+bool Constants::IS_FILE_DESC_PASSING_AVAIL = true;
+EOM
+echo '#define OS_BSD 1' >> $APP_DEFINE_FILE
+echo $IS_64_BIT >> $APP_DEFINE_FILE
+elif [ "$IS_OS_SOLARIS" != "" ]; then
+cat <<EOM> $CONSTANTS_FILE
+#include "Constants.h"
+
+bool Constants::SYS_FORK_AVAIL = true;
+bool Constants::SCRIPT_EXEC_SHOW_ERRS = false;
+bool Constants::IS_FILE_DESC_PASSING_AVAIL = true;
+EOM
+echo '#define OS_SOLARIS 1' >> $APP_DEFINE_FILE
+echo $IS_64_BIT >> $APP_DEFINE_FILE
+elif [ "$IS_OS_CYGWIN" != "" ]; then
+cat <<EOM> $CONSTANTS_FILE
+#include "Constants.h"
+
+bool Constants::SYS_FORK_AVAIL = false;
+bool Constants::SCRIPT_EXEC_SHOW_ERRS = false;
+bool Constants::IS_FILE_DESC_PASSING_AVAIL = false;
+EOM
+echo '#define OS_CYGWIN 1' >> $APP_DEFINE_FILE
+echo $IS_64_BIT >> $APP_DEFINE_FILE
 fi

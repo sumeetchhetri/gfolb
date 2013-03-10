@@ -25,6 +25,7 @@
 #include "BufferedReader.h"
 #include "ConnectionPool.h"
 #include "Logger.h"
+#include "Task.h"
 #include <fcntl.h>
 #include <dlfcn.h>
 class IConnectionHandler {
@@ -47,11 +48,12 @@ public:
 };
 
 
-class RequestProp {
+class RequestProp :public Task{
 public:
 	int fd;
 	IConnectionHandler *handler;
 	string data;
+	void run();
 };
 
 #endif /* ICONNECTIONHANDLER_H_ */

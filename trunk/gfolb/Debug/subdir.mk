@@ -23,7 +23,9 @@ CPP_SRCS += \
 ../TaskPool.cpp \
 ../Thread.cpp \
 ../ThreadPool.cpp \
-../SelEpolKqEvPrt.cpp
+../SelEpolKqEvPrt.cpp \
+../Timer.cpp \
+../Constants.cpp
 
 OBJS += \
 ./BufferedReader.o \
@@ -45,7 +47,9 @@ OBJS += \
 ./TaskPool.o \
 ./Thread.o \
 ./ThreadPool.o \
-./SelEpolKqEvPrt.o
+./SelEpolKqEvPrt.o \
+./Timer.o \
+./Constants.o
 
 CPP_DEPS += \
 ./BufferedReader.d \
@@ -67,7 +71,9 @@ CPP_DEPS += \
 ./TaskPool.d \
 ./Thread.d \
 ./ThreadPool.d \
-./SelEpolKqEvPrt.d
+./SelEpolKqEvPrt.d \
+./Timer.d \
+./Constants.d
 
 # Each subdirectory must supply rules for building sources it contributes
 %.o: ../src/%.cpp

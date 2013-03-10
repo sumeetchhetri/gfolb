@@ -14,36 +14,32 @@
     limitations under the License.  
 */
 /*
- * Task.h
+ * Timer.h
  *
- *  Created on: Mar 23, 2010
+ *  Created on: Jan 8, 2010
  *      Author: sumeet
  */
 
-#ifndef TASK_H_
-#define TASK_H_
-#include "string"
-#include "Timer.h"
-#include "TimeUnit.h"
+#ifndef TIMER_H_
+#define TIMER_H_
+#include <stdlib.h>
+#include <time.h>
+#include "Logger.h"
 using namespace std;
-
-class Task {
-	int tunit;
-	int type;
-	int priority;
-	bool console;
-	bool cleanUp;
-	Task(int priority);
-	Task(int tunit, int type);
-	friend class PoolThread;
-	friend class ThreadPool;
-	friend class TaskPool;
-	bool isWaitOver(Timer *timer);
+class Timer {
+	timespec st;
+	Logger logger;
 public:
-	void setCleanUp(bool);
-	Task();
-	virtual ~Task();
-	virtual void run()=0;
+	Timer();
+	virtual ~Timer();
+	void start();
+	void end();
+	static long long getCurrentTime();
+	static long long getTimestamp();
+	long long elapsedMicroSeconds();
+	long long elapsedMilliSeconds();
+	long long elapsedNanoSeconds();
+	long long elapsedSeconds();
 };
 
-#endif /* TASK_H_ */
+#endif /* TIMER_H_ */

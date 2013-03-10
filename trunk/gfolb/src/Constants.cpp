@@ -14,23 +14,14 @@
     limitations under the License.
 */
 /*
- * Mutex.h
+ * Constants.cpp
  *
- *  Created on: 10-Aug-2012
+ *  Created on: 19-Jun-2012
  *      Author: sumeetc
  */
+#include "Constants.h"
 
-#ifndef MUTEX_H_
-#define MUTEX_H_
-#include <pthread.h>
-
-class Mutex {
-	pthread_mutex_t mut;
-public:
-	Mutex();
-	virtual ~Mutex();
-	void lock();
-	void unlock();
-};
-
-#endif /* MUTEX_H_ */
+string Constants::INTER_LIB_FILE = "libinter.a";
+bool Constants::SYS_FORK_AVAIL = false;
+bool Constants::SCRIPT_EXEC_SHOW_ERRS = false;
+bool Constants::IS_FILE_DESC_PASSING_AVAIL = false;
