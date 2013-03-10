@@ -72,6 +72,8 @@ using namespace std;
 #include "CastUtil.h"
 #include "Logger.h"
 #include "SelEpolKqEvPrt.h"
+#include "Constants.h"
+#include "ThreadPool.h"
 #define MAXEPOLLSIZE 100
 #define MAXBUFLENM 32768
 #define PORT "9992"
@@ -80,6 +82,11 @@ using namespace std;
 #define SPASSWORD "password"
 #define SDHFILE "dh1024.pem"
 #define SCA_LIST "root.pem"
+
+class ServiceTask : public Task {
+public:
+	void run();
+};
 
 class GodFather {
 public:

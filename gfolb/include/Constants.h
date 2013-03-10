@@ -14,23 +14,22 @@
     limitations under the License.
 */
 /*
- * Mutex.h
+ * Constants.h
  *
- *  Created on: 10-Aug-2012
+ *  Created on: 19-Jun-2012
  *      Author: sumeetc
  */
 
-#ifndef MUTEX_H_
-#define MUTEX_H_
-#include <pthread.h>
+#ifndef CONSTANTS_H_
+#define CONSTANTS_H_
+#include "string"
+using namespace std;
 
-class Mutex {
-	pthread_mutex_t mut;
+class Constants {
 public:
-	Mutex();
-	virtual ~Mutex();
-	void lock();
-	void unlock();
+	static bool SYS_FORK_AVAIL;
+	static bool SCRIPT_EXEC_SHOW_ERRS;
+	static bool IS_FILE_DESC_PASSING_AVAIL;
 };
 
-#endif /* MUTEX_H_ */
+#endif /* CONSTANTS_H_ */

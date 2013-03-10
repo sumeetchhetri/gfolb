@@ -24,7 +24,9 @@
 
 static SSL_CTX *ctx;
 char* pass = NULL;
-
+static IConnectionHandler *handler = NULL;
+static bool isServerSSL = false,isThreadprq = false;
+static int thrdpsiz/*,shmid*/;
 Logger logger;
 
 int s_server_session_id_context = 1;
@@ -142,6 +144,104 @@ void signalSIGSEGV(int dummy)
 	exit(0);
 }
 
+int send_connection(int fd,int descriptor)
+{
+	struct msghdr msg;
+	struct iovec  iov [1];
+	int           n;
+
+	/* need to send some data otherwise client can't distinguish between
+	* EOF and "just sending a file descriptor"
+	*/
+	iov [0].iov_base = (void *)"x";
+	iov [0].iov_len  = 1;
+
+	/* not relevant for connected sockets */
+	msg.msg_name    = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_iov     = iov;
+	msg.msg_iovlen  = 1;
+	msg.msg_flags   = 0;
+
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+
+	/* put the descriptor in the ancillary data */
+	{
+		/* using a union to ensure its correctly aligned */
+		union
+		{
+		  struct cmsghdr cmsg;
+		  char           control [CMSG_SPACE (sizeof (int))];
+		} msg_control;
+		struct cmsghdr *cmsg;
+
+		msg.msg_control    = &msg_control;
+		msg.msg_controllen = sizeof (msg_control);
+
+		cmsg = CMSG_FIRSTHDR (&msg);
+
+		cmsg->cmsg_len   = CMSG_LEN (sizeof (int));
+		cmsg->cmsg_level = SOL_SOCKET;
+		cmsg->cmsg_type  = SCM_RIGHTS;
+
+		*((int *) CMSG_DATA (cmsg)) = descriptor;
+	}
+
+	if((n= sendmsg(fd, &msg, 0)) < 0 )
+	{
+	  perror("sendmsg()");
+	  exit(1);
+	}
+	close(descriptor);
+	return n;
+}
+
+int receive_fd(int fd)
+{
+	union
+	{
+		struct cmsghdr cmsg;
+		char           control [CMSG_SPACE (sizeof (int))];
+	} msg_control;
+
+	struct msghdr   msg;
+	struct iovec    iov [1];
+	struct cmsghdr *cmsg;
+	char            buf [192];
+	int             n;
+
+	iov [0].iov_base = buf;
+	iov [0].iov_len  = sizeof (buf);
+
+	/* not relevant for connected sockets */
+	msg.msg_name       = NULL;
+	msg.msg_namelen    = 0;
+	msg.msg_iov        = iov;
+	msg.msg_iovlen     = 1;
+	msg.msg_control    = &msg_control;
+	msg.msg_controllen = sizeof (msg_control);
+	msg.msg_flags      = 0;
+
+	n = recvmsg (fd, &msg, 0);
+	if(n == 1)
+	{
+		for (cmsg = CMSG_FIRSTHDR (&msg); cmsg; cmsg = CMSG_NXTHDR (&msg, cmsg))
+		{
+			int descriptor;
+
+			if (cmsg->cmsg_len   != CMSG_LEN (sizeof (int)) ||
+					cmsg->cmsg_level != SOL_SOCKET              ||
+					cmsg->cmsg_type  != SCM_RIGHTS)
+				continue;
+
+			descriptor = *((int *) CMSG_DATA (cmsg));
+			return descriptor;
+		}
+	}
+	return -1;
+}
+
 void* service(void* arg)
 {
 	int fd = *(int*)arg;
@@ -193,12 +293,117 @@ void* getRequest(void *arg)
 	return NULL;
 }
 
+pid_t createChildProcess(int sp[],int sockfd)
+{
+	pid_t pid;
+	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sp) == -1)
+	{
+		perror("socketpair");
+		exit(1);
+	}
+	if((pid=fork())==0)
+	{
+		if(isServerSSL)
+		{
+			PropFileReader pread;
+			propMap props = pread.getProperties("gfolb.prop");
+			string key_file = props["KEYFILE"];
+			string dh_file = props["DHFILE"];
+			string ca_list = props["CA_LIST"];
+			string rand_file = props["RANDOM"];
+			string sec_password = props["PASSWORD"];
+			string tempcl = props["CLIENT_SEC_LEVEL"];
+			/*HTTPS related*/
+			//client_auth=CLIENT_AUTH_REQUIRE;
+			/* Build our SSL context*/
+			ctx = initialize_ctx((char*)key_file.c_str(), (char*)sec_password.c_str(), (char*)ca_list.c_str());
+			load_dh_params(ctx, (char*)dh_file.c_str());
+
+			SSL_CTX_set_session_id_context(ctx,
+			  (const unsigned char*)&s_server_session_id_context,
+			  sizeof s_server_session_id_context);
+
+			/* Set our cipher list */
+			/*if(ciphers){
+			  SSL_CTX_set_cipher_list(ctx,ciphers);
+			}*/
+		}
+		string filename;
+		stringstream ss;
+		ss << "./";
+		ss << getpid();
+		ss >> filename;
+		filename.append(".cntrl");
+		logger << "generated file " << filename << flush;
+		ofstream cntrlfile;
+		cntrlfile.open(filename.c_str());
+		cntrlfile << "Process Running" << flush;
+		cntrlfile.close();
+
+		close(sockfd);
+
+		SelEpolKqEvPrt selEpolKqEvPrtHandler;
+		selEpolKqEvPrtHandler.initialize(sp[1]);
+		ThreadPool pool;
+		if(!isThreadprq)
+		{
+			pool.init(thrdpsiz,30,true);
+		}
+
+		while(1)
+		{
+			int nfds = selEpolKqEvPrtHandler.getEvents();
+			if (nfds == -1)
+			{
+				perror("poller wait child process");
+				logger << "\n----------poller child process----" << flush;
+			}
+			else
+			{
+				int fd = receive_fd(sp[1]);
+				selEpolKqEvPrtHandler.reRegisterServerSock();
+				if(isServerSSL)
+				{
+					fcntl(fd, F_SETFL, O_SYNC);
+				}
+
+				char buf[10];
+				int err;
+				if((err=recv(fd,buf,10,MSG_PEEK))==0)
+				{
+					close(fd);
+					logger << "\nsocket conn closed before being serviced" << flush;
+					continue;
+				}
+
+				handler->add(fd);
+
+				RequestProp *requestProp = new RequestProp();
+				requestProp->fd = fd;
+				requestProp->handler = handler;
+				if(isThreadprq)
+				{
+					Thread getRequest_thread(&getRequest, requestProp);
+					getRequest_thread.execute();
+				}
+				else
+				{
+					requestProp->setCleanUp(true);
+					pool.execute(*requestProp);
+				}
+			}
+		}
+	}
+	return pid;
+}
+
+
 int main(int argc, char* argv[])
 {
 
 	logger = Logger::getLogger("GodFather");
 
-	signal(SIGSEGV,signalSIGSEGV);
+	//signal(SIGSEGV,signalSIGSEGV);
 	signal(SIGPIPE,signalSIGPIPE);
 	int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
 	struct sockaddr_storage their_addr; // connector's address information
@@ -229,7 +434,7 @@ int main(int argc, char* argv[])
 		conn_pool = 10;
 	}
 	string mod_mode = props["GFOLB_MMODE"];//Default or Name of module (http,smpp,sip...)
-	bool isServerSSL = false;
+	isServerSSL = false;
 	string ssl_enb = props["SSL_ENAB"];//is SSL enabled
 	if(ssl_enb=="true" || ssl_enb=="TRUE")
 		isServerSSL = true;
@@ -238,13 +443,44 @@ int main(int argc, char* argv[])
 	strVec ipprts;
 	StringUtil::split(ipprts, serv_addrs, ";");
 
+	int preForked = 5;
+	if(props["NUM_PROC"]!="")
+		preForked = CastUtil::lexical_cast<int>(props["NUM_PROC"]);
+	string thrdpreq = props["THRD_PREQ"];
+	if(thrdpreq=="true" || thrdpreq=="TRUE")
+		isThreadprq = true;
+	else
+	{
+		thrdpreq = props["THRD_PSIZ"];
+		if(thrdpreq=="")
+			thrdpsiz = 30;
+		else
+		{
+			try
+			{
+				thrdpsiz = CastUtil::lexical_cast<int>(thrdpreq);
+			}
+			catch(...)
+			{
+				logger << "\nInvalid thread pool size defined" << flush;
+				thrdpsiz = 30;
+			}
+		}
+	}
+
 	if(isServerSSL)
 	{
+		string key_file = props["KEYFILE"];
+		string dh_file = props["DHFILE"];
+		string ca_list = props["CA_LIST"];
+		string rand_file = props["RANDOM"];
+		string sec_password = props["PASSWORD"];
+		string tempcl = props["CLIENT_SEC_LEVEL"];
 		/*HTTPS related*/
 		//client_auth=CLIENT_AUTH_REQUIRE;
 		/* Build our SSL context*/
-		ctx = initialize_ctx((char*)SKEYFILE, (char*)SPASSWORD, (char*)SCA_LIST);
-		load_dh_params(ctx, (char*)SDHFILE);
+		ctx = initialize_ctx((char*)key_file.c_str(), (char*)sec_password.c_str(), (char*)ca_list.c_str());
+		load_dh_params(ctx, (char*)dh_file.c_str());
 
 		SSL_CTX_set_session_id_context(ctx,
 		  (const unsigned char*)&s_server_session_id_context,
@@ -262,16 +498,45 @@ int main(int argc, char* argv[])
     selEpolKqEvPrtHandler.initialize(sockfd);
 
     ofstream ofs("serv.ctrl");
-    ofs << "Proces" << flush;
+    ofs << "Process" << flush;
     ofs.close();
-    IConnectionHandler *handler = new IConnectionHandler(ipprts,con_pers,conn_pool,props,isServerSSL,ctx);//new IConnectionHandler("localhost",8080,false,10);
+    handler = new IConnectionHandler(ipprts,con_pers,conn_pool,props,isServerSSL,ctx);//new IConnectionHandler("localhost",8080,false,10);
     logger << "listening on port "<< port_no;
 
     Server server(admin_port_no,false,500,&service,2);
 
+    int childNo = 0;
+    vector<string> files;
+    int sp[preForked][2];
+    ThreadPool pool;
+    if(Constants::IS_FILE_DESC_PASSING_AVAIL)
+	{
+		for(int j=0;j<preForked;j++)
+		{
+			pid_t pid = createChildProcess(sp[j],sockfd);
+			stringstream ss;
+			string filename;
+			ss << "./";
+			ss << pid;
+			ss >> filename;
+			filename.append(".cntrl");
+			files.push_back(filename);
+		}
+	}
+	else
+	{
+		if(!isThreadprq)
+		{
+			pool.init(thrdpsiz,thrdpsiz+30,true);
+		}
+	}
+
+
     ifstream ifs("serv.ctrl");
     while(ifs.is_open())
 	{
+    	if(childNo>=preForked)
+    		childNo = 0;
     	nfds = selEpolKqEvPrtHandler.getEvents();
 		if (nfds == -1)
 		{
@@ -282,6 +547,8 @@ int main(int argc, char* argv[])
 				logger << "\nThe memory area pointed to by events is not accessible" <<flush;
 			else if(errno==EINTR)
 				logger << "\ncall was interrupted by a signal handler before any of the requested events occurred" <<flush;
+			else if(errno==EINVAL)
+				logger << "not a poll file descriptor, or maxevents is less than or equal to zero" << endl;
 			else
 				logger << "\nnot an epoll file descriptor" <<flush;
 		}
@@ -300,6 +567,7 @@ int main(int argc, char* argv[])
 				}
 				else
 				{
+					selEpolKqEvPrtHandler.reRegisterServerSock();
 					selEpolKqEvPrtHandler.registerForEvent(new_fd);
 				}
 			}
@@ -307,25 +575,79 @@ int main(int argc, char* argv[])
 			{
 				char buf[10];
 				int err;
+				logger << "got new connection "<< descriptor << endl;
 				selEpolKqEvPrtHandler.unRegisterForEvent(descriptor);
-				if((err=recv(descriptor,buf,10,MSG_PEEK))==0)
+				if(Constants::IS_FILE_DESC_PASSING_AVAIL)
 				{
-					close(descriptor);
-					logger << "\nsocket conn closed before being serviced" << flush;
+					ifstream cntrlfile;
+					cntrlfile.open(files.at(childNo).c_str());
+					if(cntrlfile.is_open())
+					{
+						send_connection(sp[childNo][0], descriptor);
+						string cno = CastUtil::lexical_cast<string>(childNo);
+						childNo++;
+					}
+					else
+					{
+						int tcn = childNo;
+						for(int o=0;o<preForked;o++)
+						{
+							cntrlfile.open(files.at(o).c_str());
+							if(cntrlfile.is_open())
+							{
+								send_connection(sp[childNo][0], descriptor);
+								string cno = CastUtil::lexical_cast<string>(o);
+								childNo = o+1;
+								break;
+							}
+						}
+						close(sp[tcn][0]);
+						close(sp[tcn][1]);
+						logger << "Process got killed" << flush;
+						pid_t pid = createChildProcess(sp[tcn],sockfd);
+						stringstream ss;
+						string filename;
+						ss << "./";
+						ss << pid;
+						ss >> filename;
+						filename.append(".cntrl");
+						files[tcn] = filename;
+						logger << "created a new Process" << flush;
+						logger.info("Process got killed hence created a new Process\n");
+					}
+					cntrlfile.close();
 				}
-				else if(err>0)
+				else
 				{
+					char buf[10];
+					int err;
+					if((err=recv(descriptor,buf,10,MSG_PEEK))==0)
+					{
+						close(descriptor);
+						logger << "\nsocket conn closed before being serviced" << flush;
+						continue;
+					}
+
 					if(isServerSSL)
 					{
 						fcntl(descriptor, F_SETFL, O_SYNC);
 					}
+
 					handler->add(descriptor);
 
 					RequestProp *requestProp = new RequestProp();
 					requestProp->fd = descriptor;
 					requestProp->handler = handler;
-					Thread getRequest_thread(&getRequest, requestProp);
-					getRequest_thread.execute();
+					if(isThreadprq)
+					{
+						Thread getRequest_thread(&getRequest, requestProp);
+						getRequest_thread.execute();
+					}
+					else
+					{
+						requestProp->setCleanUp(true);
+						pool.execute(*requestProp);
+					}
 				}
 			}
 		}

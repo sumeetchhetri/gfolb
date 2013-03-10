@@ -349,9 +349,12 @@ Connection* ConnectionPool::getConnection()
 			con->host = instance->ip.at(instance->fonum) + (instance->port.at(instance->fonum)!=80?":"+CastUtil::lexical_cast<string>(instance->port.at(instance->fonum)):"");
 			if(instance->mode=="LB")
 			{
-				instance->cpmutex.lock();
-				instance->fonum++;
-				instance->cpmutex.unlock();
+				if(!con->client->isConnected())
+				{
+					instance->cpmutex.lock();
+					instance->fonum++;
+					instance->cpmutex.unlock();
+				}
 			}
 		}
 		return con;
@@ -540,6 +543,5 @@ Connection::Connection(bool isSSL)
 
 Connection::~Connection()
 {
-	client->closeConnection();
 	delete client;
 }
