@@ -389,7 +389,7 @@ pid_t createChildProcess(int sp[],int sockfd)
 				else
 				{
 					requestProp->setCleanUp(true);
-					pool.execute(*requestProp);
+					pool.submit(requestProp);
 				}
 			}
 		}
@@ -646,7 +646,7 @@ int main(int argc, char* argv[])
 					else
 					{
 						requestProp->setCleanUp(true);
-						pool.execute(*requestProp);
+						pool.submit(requestProp);
 					}
 				}
 			}
